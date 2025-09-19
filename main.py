@@ -2,11 +2,29 @@ import os
 from langchain_openai import ChatOpenAI
 from langchain.chains import ConversationChain
 from langchain.memory import ConversationBufferMemory
+from langchain.callbacks.base import BaseCallbackHandler
 
-# --- 1. 模型配置 ---
+# --- 1. 配置你的模型 ---
+# 在这里填入你的 API Base URL 和 Key
+# 如果你使用的是本地模型 (例如 Ollama + LiteLLM), base_url 可能是 "http://localhost:8000/v1"
+# 如果你使用的是云服务商的代理, 填入他们提供的地址
+# 对于本地模型, api_key 通常不是必需的, 可以随便填一个, 比如 "not-needed"
+
 BASE_URL = "https://x666.me/v1"  # 示例: Ollama 默认地址
 API_KEY = "sk-cvqWUuYL0c6Nw3gK9UH3TtGzfnUWyntiFtolbzw7sgFSWQQ2"  # 示例: Ollama 的 key (通常就是模型名或任意字符串)
-MODEL_NAME = "gemini-2.5-flash-preview-05-20"  # 示例: 你想要使用的模型名称
+MODEL_NAME = "gemini-2.5-pro"  # 示例: 你想要使用的模型名称
+
+
+# 简单的逐 token 打印处理器
+class StdoutTokenHandler(BaseCallbackHandler):
+    def on_llm_new_token(self, token, **kwargs):
+        print(token, end="", flush=True)
+
+# 强烈建议使用环境变量来管理你的 Key, 避免硬编码
+# from dotenv import load_dotenv
+# load_dotenv()
+# API_KEY = os.getenv("MY_API_KEY")
+
 
 # --- 2. 初始化 ---
 def initialize_conversation():
@@ -17,8 +35,11 @@ def initialize_conversation():
     # temperature 控制模型输出的创造性, 0 表示更确定性, 1 表示更随机
     llm = ChatOpenAI(
         model=MODEL_NAME,
+        openai_api_base=BASE_URL,
+        openai_api_key=API_KEY,
         temperature=0.7,
         streaming=True,  # 开启流式输出以获得更好的体验
+        callbacks=[StdoutTokenHandler()],  # 将逐 token 输出到控制台
     )
 
     # 初始化对话记忆
@@ -62,11 +83,11 @@ def main():
             # 3. 将 prompt 发送给 LLM
             # 4. 获取 LLM 的回复
             # 5. 将新输入和 LLM 的回复存入 memory
-            result = conversation.invoke({"input": user_input})
-
-            # 打印 AI 的回复
-            ai_response = result['response']
-            print(f"AI: {ai_response}")
+            # 先打印前缀，随后由回调逐 token 输出
+            print("AI: ", end="", flush=True)
+            _ = conversation.invoke({"input": user_input})
+            # 回调已逐 token 打印，最后补一个换行
+            print("")
 
         except KeyboardInterrupt:
             # 允许用户通过 Ctrl+C 优雅地退出
