@@ -11,9 +11,9 @@ from langchain.callbacks.base import BaseCallbackHandler
 # 如果你使用的是云服务商的代理, 填入他们提供的地址
 # 对于本地模型, api_key 通常不是必需的, 可以随便填一个, 比如 "not-needed"
 
-BASE_URL = "https://x666.me/v1"  # 示例: Ollama 默认地址
-API_KEY = "sk-cvqWUuYL0c6Nw3gK9UH3TtGzfnUWyntiFtolbzw7sgFSWQQ2"  # 示例: Ollama 的 key (通常就是模型名或任意字符串)
-MODEL_NAME = "gemini-2.5-pro"  # 示例: 你想要使用的模型名称
+BASE_URL = "https://linjinpeng-veloera.hf.space/v1"  # 示例: Ollama 默认地址
+API_KEY = "sk-p5AmVKF2bJhWseY2e5aYWMNOafbTmuykXCWteIKuUfYCcmWp"  # 示例: Ollama 的 key (通常就是模型名或任意字符串)
+MODEL_NAME = "moonshotai/Kimi-K2-Instruct-0905"  # 示例: 你想要使用的模型名称
 
 
 # 简单的逐 token 打印处理器
@@ -21,91 +21,96 @@ MODEL_NAME = "gemini-2.5-pro"  # 示例: 你想要使用的模型名称
 SHOW_THINK = True
 # 硬编码开关：是否打印底层原始返回（generations/llm_output 等），便于排查
 SHOW_RAW = True
-class StdoutTokenHandler(BaseCallbackHandler):
-    def __init__(self):
-        self._buffer = []  # 收集本轮生成的完整可见文本，用于可选解析 <think>
+reasoning = {
+                "effort": "high",  # 'low', 'medium', or 'high'
+                "summary": "auto",  # 'detailed', 'auto', or None
+            }
 
-    def on_llm_new_token(self, token, **kwargs):
-        self._buffer.append(token)
-        print(token, end="", flush=True)
-
-    def on_llm_end(self, response, **kwargs):
-        # 可选：在回复结束时检查是否需要显示“思维过程”
-        if SHOW_THINK:
-            try:
-                # 1) 检查 generations 中的 additional_kwargs / response_metadata
-                think_snippets = []
-                try:
-                    for gen in (response.generations or []):
-                        for cand in gen:
-                            msg = getattr(cand, "message", None)
-                            if msg is None:
-                                continue
-                            addk = getattr(msg, "additional_kwargs", {}) or {}
-                            # 常见字段尝试
-                            for key in ("reasoning_content", "thoughts", "thinking", "chain_of_thought", "streamText"):
-                                if key in addk and addk[key]:
-                                    think_snippets.append(str(addk[key]))
-                            # 某些网关可能把 reasoning 塞在 response_metadata
-                            meta = getattr(msg, "response_metadata", {}) or {}
-                            for key in ("reasoning", "reasoning_content"):
-                                if key in meta and meta[key]:
-                                    think_snippets.append(str(meta[key]))
-                except Exception:
-                    pass
-
-                # 2) 若 content 中包含 <think>...</think>，也尝试解析（仅用于调试观察）
-                try:
-                    full_text = "".join(self._buffer)
-                    if "<think>" in full_text and "</think>" in full_text:
-                        start = full_text.find("<think>") + len("<think>")
-                        end = full_text.find("</think>", start)
-                        if end > start:
-                            think_snippets.append(full_text[start:end].strip())
-                except Exception:
-                    pass
-
-                if think_snippets:
-                    print("\n[THINK]\n" + "\n---\n".join(think_snippets) + "\n[/THINK]")
-            finally:
-                pass
-
-        # 原始返回结构打印（便于排查代理实际回包结构）
-        if SHOW_RAW:
-            try:
-                def serialize_response(resp):
-                    data = {}
-                    data["llm_output"] = getattr(resp, "llm_output", None)
-                    gens_out = []
-                    for gen in (getattr(resp, "generations", None) or []):
-                        cand_list = []
-                        for cand in gen:
-                            item = {}
-                            item["text"] = getattr(cand, "text", None)
-                            msg = getattr(cand, "message", None)
-                            if msg is not None:
-                                item["message"] = {
-                                    "content": getattr(msg, "content", None),
-                                    "additional_kwargs": getattr(msg, "additional_kwargs", None),
-                                    "response_metadata": getattr(msg, "response_metadata", None),
-                                    "type": getattr(msg, "type", None),
-                                }
-                            item["generation_info"] = getattr(cand, "generation_info", None)
-                            cand_list.append(item)
-                        gens_out.append(cand_list)
-                    data["generations"] = gens_out
-                    # 尝试附带其它可用元数据
-                    for key in ("run", "error", "id"):
-                        if hasattr(resp, key):
-                            data[key] = getattr(resp, key)
-                    return data
-
-                raw = serialize_response(response)
-                print("\n[RAW]\n" + json.dumps(raw, ensure_ascii=False, indent=2, default=str) + "\n[/RAW]")
-            except Exception as e:
-                print(f"\n[RAW_PARSE_ERROR] {e}")
-
-        self._buffer.clear()
+# class StdoutTokenHandler(BaseCallbackHandler):
+#     def __init__(self):
+#         self._buffer = []  # 收集本轮生成的完整可见文本，用于可选解析 <think>
+#
+#     def on_llm_new_token(self, token, **kwargs):
+#         self._buffer.append(token)
+#         print(token, end="", flush=True)
+#
+#     def on_llm_end(self, response, **kwargs):
+#         # 可选：在回复结束时检查是否需要显示“思维过程”
+#         if SHOW_THINK:
+#             try:
+#                 # 1) 检查 generations 中的 additional_kwargs / response_metadata
+#                 think_snippets = []
+#                 try:
+#                     for gen in (response.generations or []):
+#                         for cand in gen:
+#                             msg = getattr(cand, "message", None)
+#                             if msg is None:
+#                                 continue
+#                             addk = getattr(msg, "additional_kwargs", {}) or {}
+#                             # 常见字段尝试
+#                             for key in ("reasoning_content", "thoughts", "thinking", "chain_of_thought", "streamText"):
+#                                 if key in addk and addk[key]:
+#                                     think_snippets.append(str(addk[key]))
+#                             # 某些网关可能把 reasoning 塞在 response_metadata
+#                             meta = getattr(msg, "response_metadata", {}) or {}
+#                             for key in ("reasoning", "reasoning_content"):
+#                                 if key in meta and meta[key]:
+#                                     think_snippets.append(str(meta[key]))
+#                 except Exception:
+#                     pass
+#
+#                 # 2) 若 content 中包含 <think>...</think>，也尝试解析（仅用于调试观察）
+#                 try:
+#                     full_text = "".join(self._buffer)
+#                     if "<think>" in full_text and "</think>" in full_text:
+#                         start = full_text.find("<think>") + len("<think>")
+#                         end = full_text.find("</think>", start)
+#                         if end > start:
+#                             think_snippets.append(full_text[start:end].strip())
+#                 except Exception:
+#                     pass
+#
+#                 if think_snippets:
+#                     print("\n[THINK]\n" + "\n---\n".join(think_snippets) + "\n[/THINK]")
+#             finally:
+#                 pass
+#
+#         # 原始返回结构打印（便于排查代理实际回包结构）
+#         if SHOW_RAW:
+#             try:
+#                 def serialize_response(resp):
+#                     data = {}
+#                     data["llm_output"] = getattr(resp, "llm_output", None)
+#                     gens_out = []
+#                     for gen in (getattr(resp, "generations", None) or []):
+#                         cand_list = []
+#                         for cand in gen:
+#                             item = {}
+#                             item["text"] = getattr(cand, "text", None)
+#                             msg = getattr(cand, "message", None)
+#                             if msg is not None:
+#                                 item["message"] = {
+#                                     "content": getattr(msg, "content", None),
+#                                     "additional_kwargs": getattr(msg, "additional_kwargs", None),
+#                                     "response_metadata": getattr(msg, "response_metadata", None),
+#                                     "type": getattr(msg, "type", None),
+#                                 }
+#                             item["generation_info"] = getattr(cand, "generation_info", None)
+#                             cand_list.append(item)
+#                         gens_out.append(cand_list)
+#                     data["generations"] = gens_out
+#                     # 尝试附带其它可用元数据
+#                     for key in ("run", "error", "id"):
+#                         if hasattr(resp, key):
+#                             data[key] = getattr(resp, key)
+#                     return data
+#
+#                 raw = serialize_response(response)
+#                 print("\n[RAW]\n" + json.dumps(raw, ensure_ascii=False, indent=2, default=str) + "\n[/RAW]")
+#             except Exception as e:
+#                 print(f"\n[RAW_PARSE_ERROR] {e}")
+#
+#         self._buffer.clear()
 
 # 强烈建议使用环境变量来管理你的 Key, 避免硬编码
 # from dotenv import load_dotenv
@@ -126,8 +131,7 @@ def initialize_conversation():
         openai_api_key=API_KEY,
         temperature=0.7,
         streaming=True,  # 开启流式输出以获得更好的体验
-        callbacks=[StdoutTokenHandler()],  # 将逐 token 输出到控制台
-        reasoning_effort = "high"
+        # callbacks=[StdoutTokenHandler()],  # 将逐 token 输出到控制台
     )
 
     # 初始化对话记忆
@@ -153,7 +157,8 @@ def initialize_dual_llms():
         openai_api_key=API_KEY,
         temperature=0.7,
         streaming=True,
-        callbacks=[StdoutTokenHandler()],
+        # callbacks=[StdoutTokenHandler()],
+        # reasoning=reasoning
     )
     llm_b = ChatOpenAI(
         model=MODEL_NAME,
@@ -161,7 +166,8 @@ def initialize_dual_llms():
         openai_api_key=API_KEY,
         temperature=0.7,
         streaming=True,
-        callbacks=[StdoutTokenHandler()],
+        # callbacks=[StdoutTokenHandler()],
+        # reasoning=reasoning
     )
     return llm_a, llm_b
 
