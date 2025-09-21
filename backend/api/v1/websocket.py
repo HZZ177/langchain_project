@@ -8,6 +8,7 @@ from backend.data.database import get_db
 from backend.core.security import extract_user_from_token
 from backend.websocket.manager import websocket_manager
 from backend.websocket.router import create_message_router
+from backend.core.logger import logger
 
 router = APIRouter()
 
@@ -72,9 +73,9 @@ async def websocket_endpoint(
                 })
                 
     except WebSocketDisconnect:
-        print(f"WebSocket连接断开: session_id={session_id}")
+        logger.info(f"WebSocket连接断开: session_id={session_id}")
     except Exception as e:
-        print(f"WebSocket连接异常: session_id={session_id}, error={e}")
+        logger.error(f"WebSocket连接异常: session_id={session_id}, error={e}")
     finally:
         # 清理连接
         websocket_manager.disconnect(session_id)

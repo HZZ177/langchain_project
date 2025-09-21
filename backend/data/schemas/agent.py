@@ -33,17 +33,20 @@ class AgentResponse(AgentBase):
     created_by: Optional[int] = None
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
 
 class AgentConfigBase(BaseModel):
     """Agent配置基础模型"""
-    config_key: str
-    config_value: str
-    config_type: str = "string"
-    description: Optional[str] = None
+    model_name: str = "gpt-5"
+    temperature: float = 0.7
+    max_tokens: Optional[int] = None
+    api_key: str
+    base_url: str = "https://linjinpeng-veloera.hf.space/v1"
+    system_prompt: Optional[str] = None
+    max_conversation_rounds: int = 5
 
 
 class AgentConfigCreate(AgentConfigBase):
@@ -53,40 +56,21 @@ class AgentConfigCreate(AgentConfigBase):
 
 class AgentConfigUpdate(BaseModel):
     """Agent配置更新模型"""
-    config_value: str
-    description: Optional[str] = None
+    model_name: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    system_prompt: Optional[str] = None
+    max_conversation_rounds: Optional[int] = None
 
 
 class AgentConfigResponse(AgentConfigBase):
     """Agent配置响应模型"""
     id: int
     agent_id: int
-    is_sensitive: bool
     created_at: datetime
     updated_at: datetime
-    
-    class Config:
-        from_attributes = True
 
-
-class UserAgentConfigCreate(BaseModel):
-    """用户Agent配置创建模型"""
-    agent_id: int
-    config_key: str
-    config_value: str
-    config_type: str = "string"
-
-
-class UserAgentConfigResponse(BaseModel):
-    """用户Agent配置响应模型"""
-    id: int
-    user_id: int
-    agent_id: int
-    config_key: str
-    config_value: str
-    config_type: str
-    created_at: datetime
-    updated_at: datetime
-    
     class Config:
         from_attributes = True

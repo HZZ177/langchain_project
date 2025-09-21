@@ -95,6 +95,24 @@
                 {{ enableMaxTokens ? '设置生成的最大Token数量' : '无限制模式，让模型自由生成完整回答（推荐）' }}
               </p>
             </div>
+
+            <!-- 对话轮数 -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                保留上下文轮数
+              </label>
+              <input
+                v-model.number="formData.max_conversation_rounds"
+                type="number"
+                min="1"
+                max="50"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="例如: 5"
+              />
+              <p class="text-xs text-gray-500 mt-1">
+                设置AI记忆的对话轮数，数值越大消耗的token越多
+              </p>
+            </div>
           </div>
 
           <!-- API配置 -->
@@ -213,7 +231,8 @@ const formData = ref({
   temperature: 0.7,
   max_tokens: null,
   api_key: '',
-  base_url: ''
+  base_url: '',
+  max_conversation_rounds: 5
 })
 
 // Token限制开关状态
@@ -237,7 +256,8 @@ const loadConfig = async () => {
       temperature: config.temperature !== undefined ? config.temperature : 0.7,
       max_tokens: config.max_tokens,
       api_key: config.api_key || '',
-      base_url: config.base_url || ''
+      base_url: config.base_url || '',
+      max_conversation_rounds: config.max_conversation_rounds !== undefined ? config.max_conversation_rounds : 5
     }
 
     // 设置Token限制开关状态

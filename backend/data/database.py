@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from backend.config import get_settings
+from backend.core.logger import logger
 
 settings = get_settings()
 
@@ -42,7 +43,7 @@ def drop_tables():
 
 def recreate_tables():
     """重新创建所有数据表"""
-    print("正在重新创建数据库表...")
+    logger.warning("正在重新创建数据库表...")
     drop_tables()
     create_tables()
-    print("数据库表重新创建完成")
+    logger.info("数据库表重新创建完成")

@@ -133,7 +133,7 @@
       </div>
 
       <!-- 新建对话按钮 -->
-      <div class="p-4 border-t border-gray-200">
+      <div class="border-t border-gray-200 p-4">
         <button
           @click="createNewChat"
           :disabled="!chatStore.currentAgentId"

@@ -3,8 +3,8 @@ Agent服务
 """
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from backend.data.models import Agent, AgentDefaultConfig, UserAgentConfig
-from backend.data.schemas import AgentCreate, AgentUpdate
+from backend.data.models import Agent, AgentConfig
+from backend.data.schemas import AgentCreate, AgentUpdate, AgentConfigCreate, AgentConfigUpdate
 
 
 class AgentService:
@@ -66,78 +66,56 @@ class AgentService:
         
         return db_agent
     
-    def get_agent_config(self, agent_id: int, user_id: Optional[int] = None) -> Dict[str, Any]:
-        """获取Agent配置（合并默认配置和用户配置）"""
-        # 获取默认配置
-        default_configs = self.db.query(AgentDefaultConfig).filter(
-            AgentDefaultConfig.agent_id == agent_id
-        ).all()
-        
-        config = {}
-        for dc in default_configs:
-            config[dc.config_key] = self._convert_config_value(dc.config_value, dc.config_type)
-        
-        # 如果指定了用户ID，获取用户自定义配置并覆盖默认配置
-        if user_id:
-            user_configs = self.db.query(UserAgentConfig).filter(
-                UserAgentConfig.agent_id == agent_id,
-                UserAgentConfig.user_id == user_id
-            ).all()
-            
-            for uc in user_configs:
-                config[uc.config_key] = self._convert_config_value(uc.config_value, uc.config_type)
-        
-        return config
-    
-    def set_user_agent_config(self, user_id: int, agent_id: int, config_key: str, 
-                             config_value: str, config_type: str = "string") -> UserAgentConfig:
-        """设置用户Agent配置"""
-        # 检查是否已存在该配置
-        existing_config = self.db.query(UserAgentConfig).filter(
-            UserAgentConfig.user_id == user_id,
-            UserAgentConfig.agent_id == agent_id,
-            UserAgentConfig.config_key == config_key
+    def get_agent_config(self, agent_id: int) -> Dict[str, Any]:
+        """获取Agent配置"""
+        agent_config = self.db.query(AgentConfig).filter(
+            AgentConfig.agent_id == agent_id
         ).first()
-        
-        if existing_config:
-            # 更新现有配置
-            existing_config.config_value = config_value
-            existing_config.config_type = config_type
-            self.db.commit()
-            self.db.refresh(existing_config)
-            return existing_config
-        else:
-            # 创建新配置
-            new_config = UserAgentConfig(
-                user_id=user_id,
-                agent_id=agent_id,
-                config_key=config_key,
-                config_value=config_value,
-                config_type=config_type
-            )
-            self.db.add(new_config)
-            self.db.commit()
-            self.db.refresh(new_config)
-            return new_config
-    
-    def _convert_config_value(self, value: str, config_type: str) -> Any:
-        """转换配置值类型"""
-        # 处理空值情况
-        if value == "" or value is None:
+
+        if not agent_config:
+            return {}
+
+        return {
+            "model_name": agent_config.model_name,
+            "temperature": agent_config.temperature,
+            "max_tokens": agent_config.max_tokens,
+            "api_key": agent_config.api_key,
+            "base_url": agent_config.base_url,
+            "system_prompt": agent_config.system_prompt
+        }
+
+    def create_agent_config(self, agent_config_create: AgentConfigCreate) -> AgentConfig:
+        """创建Agent配置"""
+        db_config = AgentConfig(
+            agent_id=agent_config_create.agent_id,
+            model_name=agent_config_create.model_name,
+            temperature=agent_config_create.temperature,
+            max_tokens=agent_config_create.max_tokens,
+            api_key=agent_config_create.api_key,
+            base_url=agent_config_create.base_url,
+            system_prompt=agent_config_create.system_prompt
+        )
+
+        self.db.add(db_config)
+        self.db.commit()
+        self.db.refresh(db_config)
+
+        return db_config
+
+    def update_agent_config(self, agent_id: int, agent_config_update: AgentConfigUpdate) -> Optional[AgentConfig]:
+        """更新Agent配置"""
+        db_config = self.db.query(AgentConfig).filter(
+            AgentConfig.agent_id == agent_id
+        ).first()
+
+        if not db_config:
             return None
 
-        if config_type == "number":
-            try:
-                return float(value) if '.' in value else int(value)
-            except ValueError:
-                return value
-        elif config_type == "boolean":
-            return value.lower() in ("true", "1", "yes", "on")
-        elif config_type == "json":
-            try:
-                import json
-                return json.loads(value)
-            except json.JSONDecodeError:
-                return value
-        else:
-            return value
+        update_data = agent_config_update.dict(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(db_config, field, value)
+
+        self.db.commit()
+        self.db.refresh(db_config)
+
+        return db_config

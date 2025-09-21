@@ -17,7 +17,7 @@ class Settings:
         self.database_url: str = "sqlite:///./ai_agent_platform.db"
 
         # JWT配置
-        self.secret_key: str = "your-secret-key-here-change-in-production"
+        self.secret_key: str = "hsyhgiewomflkzdnbgjgerhwluitojqaolwfmcnbhioeswgjh"
         self.algorithm: str = "HS256"
         self.access_token_expire_minutes: int = 30
         self.refresh_token_expire_days: int = 7

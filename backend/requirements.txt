@@ -25,3 +25,6 @@ websockets==15.0.1
 # 工具库
 httpx==0.28.1
 aiofiles==23.2.1
+
+# 日志
+loguru==0.7.3

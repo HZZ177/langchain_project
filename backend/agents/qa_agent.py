@@ -1,10 +1,12 @@
 """
 问答Agent实现
 """
-from typing import AsyncIterator, Dict, Any, List
+from typing import AsyncIterator, Dict, Any, List, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from .base_agent import BaseAgent, AgentMessage, AgentResponse
+from backend.core.llm_pool import llm_pool, LLMConnection
+from backend.core.logger import logger
 
 
 class QAAgent(BaseAgent):
@@ -12,13 +14,19 @@ class QAAgent(BaseAgent):
     大模型问答Agent
     提供通用的AI问答功能，支持多种问题类型
     """
-    
-    def __init__(self, config: Dict[str, Any]):
+
+    def __init__(self, config: Dict[str, Any], agent_id: str = None):
         super().__init__(config)
-        self.llm = self._create_llm()
+        self.agent_id = agent_id
+        self.config_dict = config
+        self.current_connection: Optional[LLMConnection] = None
+        logger.info(f"QAAgent初始化 - agent_id: {agent_id}")
     
-    def _create_llm(self) -> ChatOpenAI:
-        """创建LangChain LLM实例"""
+    def _get_llm_connection(self) -> LLMConnection:
+        """从连接池获取LLM连接"""
+        if not self.agent_id:
+            raise ValueError("Agent ID不能为空")
+
         # 验证必要的配置
         if not self.config.api_key:
             raise ValueError("API密钥不能为空")
@@ -26,32 +34,50 @@ class QAAgent(BaseAgent):
         if not self.config.model_name:
             raise ValueError("模型名称不能为空")
 
-        print(f"创建LLM实例: model={self.config.model_name}, temperature={self.config.temperature}, max_tokens={self.config.max_tokens}, base_url={self.config.base_url}")
-
-        return ChatOpenAI(
-            model=self.config.model_name,
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens,
-            api_key=self.config.api_key,
-            base_url=self.config.base_url,
-            streaming=True
+        # 从连接池获取连接
+        connection = llm_pool.get_llm_connection(
+            agent_id=self.agent_id,
+            agent_type="qa_agent",
+            config=self.config_dict
         )
+
+        if not connection:
+            raise RuntimeError(f"无法从连接池获取LLM连接 - agent_id: {self.agent_id}")
+
+        self.current_connection = connection
+        logger.info(f"获取LLM连接成功 - connection_id: {connection.connection_id}")
+        return connection
+
+    def _release_llm_connection(self):
+        """释放LLM连接回连接池"""
+        if self.current_connection:
+            llm_pool.release_llm_connection(self.current_connection.connection_id)
+            logger.info(f"释放LLM连接 - connection_id: {self.current_connection.connection_id}")
+            self.current_connection = None
     
     async def process_message(
-        self, 
-        message: AgentMessage, 
+        self,
+        message: AgentMessage,
         context: Dict[str, Any]
     ) -> AsyncIterator[AgentResponse]:
         """
         处理用户消息并返回流式响应
         """
+        connection = None
         try:
+            # 从连接池获取LLM连接
+            connection = self._get_llm_connection()
+            llm = connection.llm
+
             # 构建消息历史
             messages = self._build_messages(message, context)
-            
+
+            logger.info(f"开始处理消息 - connection_id: {connection.connection_id}, "
+                       f"agent_id: {self.agent_id}, message_length: {len(message.content)}")
+
             # 流式调用LLM
             full_response = ""
-            async for chunk in self.llm.astream(messages):
+            async for chunk in llm.astream(messages):
                 if chunk.content:
                     full_response += chunk.content
                     yield AgentResponse(
@@ -59,10 +85,11 @@ class QAAgent(BaseAgent):
                         is_final=False,
                         metadata={
                             "model": self.config.model_name,
-                            "temperature": self.config.temperature
+                            "temperature": self.config.temperature,
+                            "connection_id": connection.connection_id
                         }
                     )
-            
+
             # 发送最终响应标记
             yield AgentResponse(
                 content="",
@@ -70,16 +97,26 @@ class QAAgent(BaseAgent):
                 metadata={
                     "model": self.config.model_name,
                     "total_tokens": len(full_response.split()),
-                    "full_response": full_response
+                    "full_response": full_response,
+                    "connection_id": connection.connection_id,
+                    "usage_count": connection.usage_count
                 }
             )
-            
+
+            logger.info(f"消息处理完成 - connection_id: {connection.connection_id}, "
+                       f"response_length: {len(full_response)}")
+
         except Exception as e:
+            logger.error(f"处理消息失败 - agent_id: {self.agent_id}, 错误: {e}")
             yield AgentResponse(
                 content=f"抱歉，处理您的请求时发生错误: {str(e)}",
                 is_final=True,
                 metadata={"error": str(e)}
             )
+        finally:
+            # 确保释放连接
+            if connection:
+                self._release_llm_connection()
     
     def _build_messages(self, message: AgentMessage, context: Dict[str, Any]) -> List:
         """构建LangChain消息列表"""
@@ -91,7 +128,8 @@ class QAAgent(BaseAgent):
         
         # 添加历史对话
         conversations = context.get("conversations", [])
-        for conv in conversations[-10:]:  # 只保留最近10轮对话
+        max_rounds = getattr(self.config, 'max_conversation_rounds', 5)  # 从配置获取轮数，默认5轮
+        for conv in conversations[-max_rounds:]:  # 保留最近N轮对话
             if conv["message_type"] == "user":
                 messages.append(HumanMessage(content=conv["content"]))
             elif conv["message_type"] == "assistant":

@@ -1,9 +1,11 @@
 """
 Agent管理器
 """
-from typing import Dict, Type, Optional
+from typing import Dict, Type, Optional, Any
 from .base_agent import BaseAgent
 from .qa_agent import QAAgent
+from backend.core.llm_pool import llm_pool
+from backend.core.logger import logger
 
 
 class AgentManager:
@@ -19,42 +21,37 @@ class AgentManager:
         """获取Agent类"""
         return self._agent_classes.get(agent_type)
     
-    def create_agent(self, agent_type: str, config: Dict[str, any]) -> Optional[BaseAgent]:
+    def create_agent(self, agent_type: str, config: Dict[str, any], agent_id: str = None) -> Optional[BaseAgent]:
         """创建Agent实例"""
         agent_class = self.get_agent_class(agent_type)
         if not agent_class:
-            print(f"未找到Agent类型: {agent_type}")
+            logger.error(f"未找到Agent类型: {agent_type}")
             return None
 
         # 验证必要的配置项
         if not self._validate_required_config(agent_type, config):
-            print(f"Agent配置验证失败: {config}")
+            logger.error(f"Agent配置验证失败: {config}")
             return None
 
         try:
-            agent = agent_class(config)
-            print(f"Agent创建成功: {agent_type}")
+            # 传递agent_id给Agent构造函数
+            if agent_type == "qa_agent":
+                agent = agent_class(config, agent_id)
+            else:
+                agent = agent_class(config)
+
+            logger.info(f"Agent创建成功 - agent_type: {agent_type}, agent_id: {agent_id}")
             return agent
         except Exception as e:
-            print(f"创建Agent失败: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"创建Agent失败 - agent_type: {agent_type}, agent_id: {agent_id}, 错误: {e}")
             return None
     
     def get_agent_instance(self, agent_id: str, agent_type: str, config: Dict[str, any]) -> Optional[BaseAgent]:
-        """获取Agent实例（带缓存）"""
-        cache_key = f"{agent_id}_{agent_type}"
-        
-        # 检查缓存
-        if cache_key in self._agent_instances:
-            return self._agent_instances[cache_key]
-        
-        # 创建新实例
-        agent = self.create_agent(agent_type, config)
-        if agent:
-            self._agent_instances[cache_key] = agent
-        
-        return agent
+        """获取Agent实例（不再使用缓存，每次创建新实例以使用连接池）"""
+        # 不再使用Agent实例缓存，因为连接池已经处理了LLM实例的复用
+        # 每次创建新的Agent实例，但LLM连接会从连接池复用
+        logger.info(f"创建Agent实例 - agent_id: {agent_id}, agent_type: {agent_type}")
+        return self.create_agent(agent_type, config, agent_id)
     
     def get_available_agent_types(self) -> Dict[str, Dict[str, any]]:
         """获取可用的Agent类型信息"""
@@ -86,7 +83,7 @@ class AgentManager:
                     "supported_features": ["basic_chat", "streaming_response"]
                 }
             except Exception as e:
-                print(f"获取Agent类型信息失败 {agent_type}: {e}")
+                logger.error(f"获取Agent类型信息失败 {agent_type}: {e}")
                 agent_types[agent_type] = {
                     "name": agent_class.__name__,
                     "description": agent_class.__doc__ or "",
@@ -101,22 +98,47 @@ class AgentManager:
         agent_class = self.get_agent_class(agent_type)
         if not agent_class:
             return False
-        
+
         try:
-            temp_agent = agent_class(config)
+            # 创建临时Agent实例进行验证（不传agent_id）
+            if agent_type == "qa_agent":
+                temp_agent = agent_class(config, "temp_validation")
+            else:
+                temp_agent = agent_class(config)
             return temp_agent.validate_config(config)
         except Exception:
             return False
     
+    def prewarm_agent_pools(self, agents_config: Dict[str, Dict[str, Any]]):
+        """预热所有Agent的连接池"""
+        logger.info("开始预热Agent连接池...")
+
+        for agent_id, agent_info in agents_config.items():
+            agent_type = agent_info.get("type")
+            config = agent_info.get("config", {})
+
+            if agent_type and config:
+                try:
+                    llm_pool.prewarm_agent_pool(agent_id, agent_type, config)
+                    logger.info(f"Agent连接池预热成功 - agent_id: {agent_id}, agent_type: {agent_type}")
+                except Exception as e:
+                    logger.error(f"Agent连接池预热失败 - agent_id: {agent_id}, 错误: {e}")
+
+        logger.info("Agent连接池预热完成")
+
+    def get_pool_stats(self) -> Dict[str, Any]:
+        """获取连接池统计信息"""
+        return llm_pool.get_pool_stats()
+
     def clear_cache(self):
-        """清空Agent实例缓存"""
-        self._agent_instances.clear()
-    
+        """清空Agent实例缓存（已废弃，保留兼容性）"""
+        logger.warning("clear_cache方法已废弃，Agent实例不再缓存")
+        pass
+
     def remove_agent_from_cache(self, agent_id: str, agent_type: str):
-        """从缓存中移除特定Agent实例"""
-        cache_key = f"{agent_id}_{agent_type}"
-        if cache_key in self._agent_instances:
-            del self._agent_instances[cache_key]
+        """从缓存中移除特定Agent实例（已废弃，保留兼容性）"""
+        logger.warning("remove_agent_from_cache方法已废弃，Agent实例不再缓存")
+        pass
 
     def _validate_required_config(self, agent_type: str, config: Dict[str, any]) -> bool:
         """验证必要的配置项"""
@@ -124,7 +146,7 @@ class AgentManager:
             required_keys = ["api_key", "model_name"]
             for key in required_keys:
                 if not config.get(key):
-                    print(f"缺少必要配置项: {key}")
+                    logger.error(f"缺少必要配置项: {key}")
                     return False
         return True
 

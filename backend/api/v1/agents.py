@@ -115,7 +115,7 @@ async def get_agent_config(
             detail="Agent不存在"
         )
     
-    config = agent_service.get_agent_config(agent_id, current_user.id)
+    config = agent_service.get_agent_config(agent_id)
     return {"config": config}
 
 
@@ -159,9 +159,9 @@ async def update_agent_config(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """更新用户的Agent配置"""
+    """更新Agent配置"""
     agent_service = AgentService(db)
-    
+
     # 检查Agent是否存在
     agent = agent_service.get_agent_by_id(agent_id)
     if not agent:
@@ -169,36 +169,26 @@ async def update_agent_config(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agent不存在"
         )
-    
+
     # 验证配置
     if not agent_manager.validate_agent_config(agent.type, config_data):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="配置参数无效"
         )
-    
-    try:
-        # 更新用户配置
-        for key, value in config_data.items():
-            # 根据值类型判断配置类型
-            config_type = "string"
-            if value is None:
-                config_type = "number"  # null值通常用于数字字段
-                value = ""  # 存储为空字符串
-            elif isinstance(value, bool):
-                config_type = "boolean"
-            elif isinstance(value, (int, float)):
-                config_type = "number"
-            elif isinstance(value, (dict, list)):
-                config_type = "json"
-                value = str(value)  # JSON序列化
 
-            agent_service.set_user_agent_config(
-                current_user.id,
-                agent_id,
-                key,
-                str(value) if value is not None else "",
-                config_type
+    try:
+        # 创建配置更新对象
+        from backend.data.schemas import AgentConfigUpdate
+        config_update = AgentConfigUpdate(**config_data)
+
+        # 更新Agent配置
+        updated_config = agent_service.update_agent_config(agent_id, config_update)
+
+        if not updated_config:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Agent配置不存在"
             )
 
         # 清除Agent实例缓存，确保新配置生效

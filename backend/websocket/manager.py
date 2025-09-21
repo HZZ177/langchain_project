@@ -5,6 +5,7 @@ from typing import Dict, Set, Optional
 from fastapi import WebSocket
 import json
 import asyncio
+from backend.core.logger import logger
 
 
 class WebSocketManager:
@@ -35,8 +36,8 @@ class WebSocketManager:
         if user_id not in self.user_sessions:
             self.user_sessions[user_id] = set()
         self.user_sessions[user_id].add(session_id)
-        
-        print(f"WebSocket连接已建立: session_id={session_id}, user_id={user_id}")
+
+        logger.info(f"WebSocket连接已建立: session_id={session_id}, user_id={user_id}")
     
     def disconnect(self, session_id: str):
         """断开WebSocket连接"""
@@ -53,7 +54,7 @@ class WebSocketManager:
                 if not self.user_sessions[user_id]:
                     del self.user_sessions[user_id]
         
-        print(f"WebSocket连接已断开: session_id={session_id}")
+        logger.info(f"WebSocket连接已断开: session_id={session_id}")
     
     async def send_message(self, session_id: str, message: dict) -> bool:
         """发送消息到特定会话"""
@@ -65,7 +66,7 @@ class WebSocketManager:
             await websocket.send_text(json.dumps(message, ensure_ascii=False))
             return True
         except Exception as e:
-            print(f"发送消息失败: session_id={session_id}, error={e}")
+            logger.error(f"发送消息失败: session_id={session_id}, error={e}")
             # 连接可能已断开，清理连接
             self.disconnect(session_id)
             return False
@@ -126,7 +127,7 @@ class WebSocketManager:
             self.disconnect(session_id)
         
         if inactive_sessions:
-            print(f"清理了 {len(inactive_sessions)} 个非活跃连接")
+            logger.info(f"清理了 {len(inactive_sessions)} 个非活跃连接")
 
 
 # 全局WebSocket管理器实例

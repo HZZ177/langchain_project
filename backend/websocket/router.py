@@ -9,6 +9,7 @@ from backend.agents.base_agent import AgentMessage
 from backend.services.session_service import SessionService, ConversationService
 from backend.services.agent_service import AgentService
 from backend.data.schemas import ConversationCreate
+from backend.core.logger import logger
 from .manager import WebSocketManager
 
 
@@ -37,12 +38,9 @@ class MessageRouter:
             
             # 3. 获取Agent配置
             agent_service = AgentService(db)
-            agent_config = agent_service.get_agent_config(
-                session_info.agent_id,
-                session_info.user_id
-            )
+            agent_config = agent_service.get_agent_config(session_info.agent_id)
 
-            print(f"获取到的Agent配置: {agent_config}")
+            logger.debug(f"获取到的Agent配置: {agent_config}")
 
             if not agent_config:
                 await self._send_error(session_id, "AGENT_CONFIG_NOT_FOUND", "Agent配置不存在")
@@ -53,16 +51,20 @@ class MessageRouter:
             if not agent_info:
                 await self._send_error(session_id, "AGENT_NOT_FOUND", "Agent不存在")
                 return
-            
+
+            logger.info(f"开始获取Agent实例 - session_id: {session_id}, agent_id: {session_info.agent_id}, agent_type: {agent_info.type}")
+
             agent = agent_manager.get_agent_instance(
                 str(session_info.agent_id),
                 agent_info.type,
                 agent_config
             )
-            
+
             if not agent:
                 await self._send_error(session_id, "AGENT_CREATE_FAILED", "Agent创建失败")
                 return
+
+            logger.info(f"Agent实例获取成功 - session_id: {session_id}, agent_id: {session_info.agent_id}")
             
             # 5. 保存用户消息
             conversation_service = ConversationService(db)
@@ -121,9 +123,10 @@ class MessageRouter:
                             metadata=response.metadata
                         )
                     )
-                    
+
         except Exception as e:
-            print(f"消息路由处理异常: {e}")
+            logger.error(f"消息路由处理异常: {e}")
+            logger.exception("消息路由处理异常详情")
             await self._send_error(session_id, "PROCESSING_ERROR", f"处理消息时发生错误: {str(e)}")
     
     def _validate_message(self, message: dict) -> dict:
