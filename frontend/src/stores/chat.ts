@@ -11,6 +11,7 @@ export const useChatStore = defineStore('chat', () => {
   const currentSession = ref<Session | null>(null)
   const conversations = ref<Conversation[]>([])
   const agents = ref<Agent[]>([])
+  const currentAgentId = ref<number | null>(null)
   const loading = ref(false)
   const wsConnected = ref(false)
   const streamingMessage = ref('')
@@ -19,12 +20,17 @@ export const useChatStore = defineStore('chat', () => {
 
   // 计算属性
   const currentAgent = computed(() => {
-    if (!currentSession.value) return null
-    return agents.value.find(agent => agent.id === currentSession.value!.agent_id) || null
+    if (!currentAgentId.value) return null
+    return agents.value.find(agent => agent.id === currentAgentId.value) || null
+  })
+
+  const filteredSessions = computed(() => {
+    if (!currentAgentId.value) return []
+    return sessions.value.filter(session => session.agent_id === currentAgentId.value)
   })
 
   const sortedSessions = computed(() => {
-    return [...sessions.value].sort((a, b) => 
+    return [...filteredSessions.value].sort((a, b) =>
       new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
     )
   })
@@ -33,6 +39,10 @@ export const useChatStore = defineStore('chat', () => {
   const fetchAgents = async () => {
     try {
       agents.value = await agentService.getAgents()
+      // 如果没有选中的Agent且有可用Agent，选择第一个
+      if (!currentAgentId.value && agents.value.length > 0) {
+        currentAgentId.value = agents.value[0].id
+      }
     } catch (error) {
       console.error('获取Agent列表失败:', error)
     }
@@ -47,10 +57,28 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // 创建新会话
-  const createSession = async (agentId: number, name?: string) => {
+  // 设置当前Agent
+  const setCurrentAgent = (agentId: number) => {
+    currentAgentId.value = agentId
+    // 切换Agent时清除当前会话
+    if (currentSession.value && currentSession.value.agent_id !== agentId) {
+      currentSession.value = null
+      conversations.value = []
+      if (wsConnected.value) {
+        websocketService.disconnect()
+        wsConnected.value = false
+      }
+    }
+  }
+
+  // 创建新会话（在当前Agent下）
+  const createSession = async (name?: string) => {
+    if (!currentAgentId.value) {
+      throw new Error('请先选择一个Agent')
+    }
+
     try {
-      const newSession = await sessionService.createSession(agentId, name)
+      const newSession = await sessionService.createSession(currentAgentId.value, name || '新对话')
       sessions.value.unshift(newSession)
       return newSession
     } catch (error) {
@@ -223,19 +251,22 @@ export const useChatStore = defineStore('chat', () => {
     currentSession,
     conversations,
     agents,
+    currentAgentId,
     loading,
     wsConnected,
     streamingMessage,
     isStreaming,
     isWaitingForResponse,
-    
+
     // 计算属性
     currentAgent,
+    filteredSessions,
     sortedSessions,
-    
+
     // 方法
     fetchAgents,
     fetchSessions,
+    setCurrentAgent,
     createSession,
     setCurrentSession,
     fetchConversations,

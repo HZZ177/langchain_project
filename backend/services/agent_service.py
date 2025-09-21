@@ -122,6 +122,10 @@ class AgentService:
     
     def _convert_config_value(self, value: str, config_type: str) -> Any:
         """转换配置值类型"""
+        # 处理空值情况
+        if value == "" or value is None:
+            return None
+
         if config_type == "number":
             try:
                 return float(value) if '.' in value else int(value)

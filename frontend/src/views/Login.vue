@@ -41,9 +41,7 @@
           </div>
         </div>
 
-        <div v-if="errorMessage" class="text-red-600 text-sm text-center">
-          {{ errorMessage }}
-        </div>
+
 
         <div>
           <button
@@ -64,35 +62,36 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useNotification } from '@/composables/useNotification'
 import type { LoginForm } from '@/types'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const notification = useNotification()
 
 const form = ref<LoginForm>({
   username: '',
   password: ''
 })
 
-const errorMessage = ref('')
 const loading = ref(false)
 
 const handleLogin = async () => {
   if (loading.value) return
-  
-  errorMessage.value = ''
+
   loading.value = true
 
   try {
     const result = await authStore.login(form.value)
-    
+
     if (result.success) {
+      notification.success('登录成功')
       router.push('/chat')
     } else {
-      errorMessage.value = result.message || '登录失败'
+      notification.error(result.message || '登录失败')
     }
   } catch (error) {
-    errorMessage.value = '登录失败，请稍后重试'
+    notification.handleError(error, '登录失败，请稍后重试')
   } finally {
     loading.value = false
   }

@@ -643,9 +643,41 @@ class MessageRouter:
 }
 ```
 
-## 6. 前后端结构设计
+## 6. 配置管理系统
 
-### 6.1 前端结构
+### 6.1 简化配置架构
+
+为了降低系统复杂性，平台采用简化的配置管理策略：
+
+#### 6.1.1 配置层次（简化版）
+```
+应用配置 (config.py) → 数据库存储 → 运行时读取
+```
+
+**配置流程**：
+1. **应用启动时**：从config.py读取硬编码的默认值
+2. **数据库初始化**：将默认值写入AgentDefaultConfig表（一次性）
+3. **运行时**：完全从数据库读取配置，支持用户个性化覆盖
+
+#### 6.1.2 配置优先级
+```
+用户配置 (UserAgentConfig) > Agent默认配置 (AgentDefaultConfig)
+```
+
+#### 6.1.3 移除的复杂性
+- ❌ 不再支持环境变量读取
+- ❌ 不再支持.env文件
+- ❌ 不再使用Pydantic BaseSettings
+- ✅ 只使用硬编码默认值 + 数据库存储
+
+#### 6.1.4 配置修改方式
+- **系统默认配置**：直接修改config.py中的硬编码值，重新初始化数据库
+- **Agent默认配置**：通过管理界面修改AgentDefaultConfig表
+- **用户个性化配置**：通过用户界面修改UserAgentConfig表
+
+## 7. 前后端结构设计
+
+### 7.1 前端结构
 ```
 frontend/
 ├── src/
@@ -677,7 +709,7 @@ frontend/
 └── package.json
 ```
 
-### 6.2 后端结构
+### 7.2 后端结构
 ```
 backend/
 ├── app/
@@ -733,17 +765,13 @@ backend/
 │   └── database.py         # 数据库连接
 ├── core/                   # 核心功能
 │   ├── auth.py             # 认证授权
-│   ├── config.py           # 配置管理
+│   ├── config.py           # 简化配置管理（仅硬编码默认值）
 │   ├── exceptions.py       # 异常定义
 │   ├── security.py         # 安全相关
 │   ├── encryption.py       # 加密解密
 │   ├── quota.py            # 配额管理
 │   ├── logging.py          # 日志管理
 │   └── middleware.py       # 中间件
-└── tests/                  # 测试
-    ├── unit/               # 单元测试
-    ├── integration/        # 集成测试
-    └── fixtures/           # 测试数据
 ```
 
 ## 7. 开发阶段规划

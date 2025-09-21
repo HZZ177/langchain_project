@@ -32,9 +32,6 @@ class AgentManager:
             return None
 
         try:
-            # 设置环境变量（如果需要）
-            self._set_environment_variables(config)
-
             agent = agent_class(config)
             print(f"Agent创建成功: {agent_type}")
             return agent
@@ -131,18 +128,7 @@ class AgentManager:
                     return False
         return True
 
-    def _set_environment_variables(self, config: Dict[str, any]):
-        """设置环境变量"""
-        import os
 
-        # 设置OpenAI API密钥环境变量
-        if config.get("api_key"):
-            os.environ["OPENAI_API_KEY"] = config["api_key"]
-            print(f"设置环境变量 OPENAI_API_KEY")
-
-        # 设置其他可能需要的环境变量
-        if config.get("base_url"):
-            os.environ["OPENAI_BASE_URL"] = config["base_url"]
 
 
 # 全局Agent管理器实例

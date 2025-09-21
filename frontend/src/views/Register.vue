@@ -55,13 +55,7 @@
           </div>
         </div>
 
-        <div v-if="errorMessage" class="text-red-600 text-sm text-center">
-          {{ errorMessage }}
-        </div>
 
-        <div v-if="successMessage" class="text-green-600 text-sm text-center">
-          {{ successMessage }}
-        </div>
 
         <div>
           <button
@@ -82,10 +76,12 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useNotification } from '@/composables/useNotification'
 import type { RegisterForm } from '@/types'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const notification = useNotification()
 
 const form = ref<RegisterForm>({
   username: '',
@@ -93,30 +89,26 @@ const form = ref<RegisterForm>({
   password: ''
 })
 
-const errorMessage = ref('')
-const successMessage = ref('')
 const loading = ref(false)
 
 const handleRegister = async () => {
   if (loading.value) return
-  
-  errorMessage.value = ''
-  successMessage.value = ''
+
   loading.value = true
 
   try {
     const result = await authStore.register(form.value)
-    
+
     if (result.success) {
-      successMessage.value = '注册成功！请登录'
+      notification.success('注册成功！正在跳转到登录页面...')
       setTimeout(() => {
         router.push('/login')
       }, 2000)
     } else {
-      errorMessage.value = result.message || '注册失败'
+      notification.error(result.message || '注册失败')
     }
   } catch (error) {
-    errorMessage.value = '注册失败，请稍后重试'
+    notification.handleError(error, '注册失败，请稍后重试')
   } finally {
     loading.value = false
   }

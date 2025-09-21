@@ -112,9 +112,9 @@ async def create_default_agents():
                 },
                 {
                     "config_key": "max_tokens",
-                    "config_value": str(settings.default_max_tokens),
+                    "config_value": str(settings.default_max_tokens) if settings.default_max_tokens is not None else "",
                     "config_type": "number",
-                    "description": "最大生成token数"
+                    "description": "最大生成token数，留空表示无限制"
                 },
                 {
                     "config_key": "api_key",

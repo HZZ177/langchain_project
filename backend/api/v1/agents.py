@@ -180,14 +180,30 @@ async def update_agent_config(
     try:
         # 更新用户配置
         for key, value in config_data.items():
+            # 根据值类型判断配置类型
+            config_type = "string"
+            if value is None:
+                config_type = "number"  # null值通常用于数字字段
+                value = ""  # 存储为空字符串
+            elif isinstance(value, bool):
+                config_type = "boolean"
+            elif isinstance(value, (int, float)):
+                config_type = "number"
+            elif isinstance(value, (dict, list)):
+                config_type = "json"
+                value = str(value)  # JSON序列化
+
             agent_service.set_user_agent_config(
-                current_user.id, 
-                agent_id, 
-                key, 
-                str(value),
-                "string"  # 简化处理，实际应该根据值类型判断
+                current_user.id,
+                agent_id,
+                key,
+                str(value) if value is not None else "",
+                config_type
             )
-        
+
+        # 清除Agent实例缓存，确保新配置生效
+        agent_manager.remove_agent_from_cache(str(agent_id), agent.type)
+
         return {"message": "配置更新成功"}
     except Exception as e:
         raise HTTPException(

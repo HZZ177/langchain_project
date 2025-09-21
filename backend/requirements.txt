@@ -13,7 +13,6 @@ passlib[bcrypt]==1.7.4
 
 # 数据验证
 pydantic==2.11.9
-pydantic-settings==2.10.0
 
 # AI框架
 langchain==1.0.0a6
@@ -24,6 +23,5 @@ langchain-core==1.0.0a4
 websockets==15.0.1
 
 # 工具库
-python-dotenv==1.1.1
 httpx==0.28.1
 aiofiles==23.2.1

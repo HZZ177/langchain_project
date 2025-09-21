@@ -26,7 +26,7 @@ class QAAgent(BaseAgent):
         if not self.config.model_name:
             raise ValueError("模型名称不能为空")
 
-        print(f"创建LLM实例: model={self.config.model_name}, base_url={self.config.base_url}")
+        print(f"创建LLM实例: model={self.config.model_name}, temperature={self.config.temperature}, max_tokens={self.config.max_tokens}, base_url={self.config.base_url}")
 
         return ChatOpenAI(
             model=self.config.model_name,
@@ -120,11 +120,10 @@ class QAAgent(BaseAgent):
                     "description": "控制回答的随机性"
                 },
                 "max_tokens": {
-                    "type": "integer",
-                    "default": 2000,
+                    "type": ["integer", "null"],
+                    "default": None,
                     "minimum": 1,
-                    "maximum": 4000,
-                    "description": "最大生成token数"
+                    "description": "最大生成token数，留空表示无限制"
                 },
                 "api_key": {
                     "type": "string",
@@ -157,8 +156,9 @@ class QAAgent(BaseAgent):
         # 检查max_tokens范围
         if "max_tokens" in config:
             max_tokens = config["max_tokens"]
-            if not isinstance(max_tokens, int) or max_tokens < 1:
-                return False
+            if max_tokens is not None:
+                if not isinstance(max_tokens, int) or max_tokens < 1:
+                    return False
         
         return True
     
