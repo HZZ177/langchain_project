@@ -6,7 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from backend.config import get_settings
 from backend.data.database import create_tables, get_db, recreate_tables
-from backend.data.models import Agent, AgentConfig
+from backend.data.models import Agent
+from backend.data.models.agent import QAAgentConfig, BrainstormAgentConfig
 from backend.services.auth_service import AuthService
 from backend.services.agent_service import AgentService
 from backend.agents.agent_manager import agent_manager
@@ -124,7 +125,7 @@ async def create_default_agents():
             Agent.type == "qa_agent",
             Agent.is_system == True
         ).first()
-        
+
         if not existing_qa_agent:
             # 创建QA Agent
             qa_agent = Agent(
@@ -137,24 +138,43 @@ async def create_default_agents():
             db.add(qa_agent)
             db.commit()
             db.refresh(qa_agent)
-            
-            # 创建Agent配置
-            agent_config = AgentConfig(
-                agent_id=qa_agent.id,
-                model_name=settings.default_model_name,
-                temperature=settings.default_temperature,
-                max_tokens=settings.default_max_tokens,
-                api_key=settings.openai_api_key,
-                base_url=settings.openai_base_url,
-                system_prompt="你是一个有用的AI助手，能够进行自然的中文对话。请提供准确、有帮助的回答。",
-                max_conversation_rounds=5
-            )
-            db.add(agent_config)
-            
+
+            # 创建QA Agent配置（使用数据库字段默认值）
+            qa_config = QAAgentConfig(agent_id=qa_agent.id)
+            db.add(qa_config)
+
             db.commit()
             logger.info(f"默认QA Agent创建完成: {qa_agent.name}")
         else:
             logger.info(f"QA Agent已存在: {existing_qa_agent.name}")
+
+        # 检查是否已存在头脑风暴Agent
+        existing_brainstorm_agent = db.query(Agent).filter(
+            Agent.type == "brainstorm_agent",
+            Agent.is_system == True
+        ).first()
+
+        if not existing_brainstorm_agent:
+            # 创建头脑风暴Agent
+            brainstorm_agent = Agent(
+                name="双模型头脑风暴助手",
+                type="brainstorm_agent",
+                description="使用两个不同的AI模型进行协作讨论，提供多角度思考和深度分析",
+                is_system=True,
+                is_active=True
+            )
+            db.add(brainstorm_agent)
+            db.commit()
+            db.refresh(brainstorm_agent)
+
+            # 创建头脑风暴Agent配置（使用数据库字段默认值）
+            brainstorm_config = BrainstormAgentConfig(agent_id=brainstorm_agent.id)
+            db.add(brainstorm_config)
+
+            db.commit()
+            logger.info(f"默认头脑风暴Agent创建完成: {brainstorm_agent.name}")
+        else:
+            logger.info(f"头脑风暴Agent已存在: {existing_brainstorm_agent.name}")
 
     except Exception as e:
         logger.error(f"创建默认Agent失败: {e}")
@@ -177,21 +197,30 @@ async def create_default_agents():
             db.commit()
             db.refresh(qa_agent)
 
-            # 创建Agent配置
-            agent_config = AgentConfig(
-                agent_id=qa_agent.id,
-                model_name=settings.default_model_name,
-                temperature=settings.default_temperature,
-                max_tokens=settings.default_max_tokens,
-                api_key=settings.openai_api_key,
-                base_url=settings.openai_base_url,
-                system_prompt="你是一个有用的AI助手，能够进行自然的中文对话。请提供准确、有帮助的回答。",
-                max_conversation_rounds=5
+            # 创建QA Agent配置（使用数据库字段默认值）
+            qa_config = QAAgentConfig(agent_id=qa_agent.id)
+            db.add(qa_config)
+            db.commit()
+
+            # 重新创建头脑风暴Agent
+            brainstorm_agent = Agent(
+                name="双模型头脑风暴助手",
+                type="brainstorm_agent",
+                description="使用两个不同的AI模型进行协作讨论，提供多角度思考和深度分析",
+                is_system=True,
+                is_active=True
             )
-            db.add(agent_config)
+            db.add(brainstorm_agent)
+            db.commit()
+            db.refresh(brainstorm_agent)
+
+            # 创建头脑风暴Agent配置（使用数据库字段默认值）
+            brainstorm_config = BrainstormAgentConfig(agent_id=brainstorm_agent.id)
+            db.add(brainstorm_config)
             db.commit()
 
             logger.info(f"默认QA Agent创建成功: {qa_agent.name}")
+            logger.info(f"默认头脑风暴Agent创建成功: {brainstorm_agent.name}")
         except Exception as retry_e:
             logger.error(f"重试后仍然失败: {retry_e}")
             db.rollback()

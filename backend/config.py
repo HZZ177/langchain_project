@@ -27,14 +27,7 @@ class Settings:
         self.admin_email: str = "admin@example.com"
         self.admin_password: str = "admin123"
 
-        # AI模型默认配置（仅用于数据库初始化）
-        self.default_model_name: str = "gpt-5"
-        self.default_temperature: float = 0.7
-        self.default_max_tokens: Optional[int] = None  # None表示无限制
 
-        # OpenAI配置（仅用于数据库初始化）
-        self.openai_api_key: str = "sk-p5AmVKF2bJhWseY2e5aYWMNOafbTmuykXCWteIKuUfYCcmWp"
-        self.openai_base_url: str = "https://linjinpeng-veloera.hf.space/v1"
 
         # CORS配置
         self.allowed_origins: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]

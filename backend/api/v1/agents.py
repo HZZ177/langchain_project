@@ -178,17 +178,13 @@ async def update_agent_config(
         )
 
     try:
-        # 创建配置更新对象
-        from backend.data.schemas import AgentConfigUpdate
-        config_update = AgentConfigUpdate(**config_data)
+        # 更新Agent配置 - 使用新的多态方式
+        success = agent_service.update_agent_config(agent_id, config_data)
 
-        # 更新Agent配置
-        updated_config = agent_service.update_agent_config(agent_id, config_update)
-
-        if not updated_config:
+        if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Agent配置不存在"
+                detail="Agent配置不存在或更新失败"
             )
 
         # 清除Agent实例缓存，确保新配置生效

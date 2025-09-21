@@ -4,6 +4,7 @@ Agent管理器
 from typing import Dict, Type, Optional, Any
 from .base_agent import BaseAgent
 from .qa_agent import QAAgent
+from .brainstorm_agent import BrainstormAgent
 from backend.core.llm_pool import llm_pool
 from backend.core.logger import logger
 
@@ -14,6 +15,7 @@ class AgentManager:
     def __init__(self):
         self._agent_classes: Dict[str, Type[BaseAgent]] = {
             "qa_agent": QAAgent,
+            "brainstorm_agent": BrainstormAgent,
         }
         self._agent_instances: Dict[str, BaseAgent] = {}
     
@@ -35,7 +37,7 @@ class AgentManager:
 
         try:
             # 传递agent_id给Agent构造函数
-            if agent_type == "qa_agent":
+            if agent_type in ["qa_agent", "brainstorm_agent"]:
                 agent = agent_class(config, agent_id)
             else:
                 agent = agent_class(config)
@@ -60,12 +62,20 @@ class AgentManager:
         for agent_type, agent_class in self._agent_classes.items():
             # 创建临时实例获取信息（不实际初始化LLM）
             try:
-                # 使用最小配置创建临时实例
-                temp_config = {
-                    "model_name": "gpt-3.5-turbo",
-                    "api_key": "temp_key_for_schema_only",
-                    "base_url": "https://api.openai.com/v1"
-                }
+                # 根据Agent类型使用不同的临时配置
+                if agent_type == "brainstorm_agent":
+                    temp_config = {
+                        "model_a_name": "gpt-4",
+                        "model_a_api_key": "temp_key_for_schema_only",
+                        "model_b_name": "claude-3-sonnet",
+                        "model_b_api_key": "temp_key_for_schema_only"
+                    }
+                else:
+                    temp_config = {
+                        "model_name": "gpt-3.5-turbo",
+                        "api_key": "temp_key_for_schema_only",
+                        "base_url": "https://api.openai.com/v1"
+                    }
 
                 # 直接调用类方法获取配置模式，避免实际初始化
                 if hasattr(agent_class, 'get_config_schema_static'):
@@ -73,14 +83,21 @@ class AgentManager:
                 else:
                     # 如果没有静态方法，创建临时实例但不初始化LLM
                     temp_agent = agent_class.__new__(agent_class)
-                    temp_agent.config = temp_agent._parse_config(temp_config)
+                    if hasattr(temp_agent, '_parse_config'):
+                        temp_agent.config = temp_agent._parse_config(temp_config)
                     config_schema = temp_agent.get_config_schema()
+
+                    # 获取支持的功能特性
+                    if hasattr(temp_agent, 'get_supported_features'):
+                        supported_features = temp_agent.get_supported_features()
+                    else:
+                        supported_features = ["basic_chat", "streaming_response"]
 
                 agent_types[agent_type] = {
                     "name": agent_class.__name__,
                     "description": agent_class.__doc__ or "",
                     "config_schema": config_schema,
-                    "supported_features": ["basic_chat", "streaming_response"]
+                    "supported_features": supported_features
                 }
             except Exception as e:
                 logger.error(f"获取Agent类型信息失败 {agent_type}: {e}")
@@ -101,7 +118,7 @@ class AgentManager:
 
         try:
             # 创建临时Agent实例进行验证（不传agent_id）
-            if agent_type == "qa_agent":
+            if agent_type in ["qa_agent", "brainstorm_agent"]:
                 temp_agent = agent_class(config, "temp_validation")
             else:
                 temp_agent = agent_class(config)

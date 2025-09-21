@@ -18,13 +18,22 @@
     </div>
 
     <!-- 配置表单 -->
-    <form v-else @submit.prevent="handleSubmit" class="flex-1 flex flex-col">
-      <!-- 表单内容区域 -->
-      <div class="flex-1 overflow-y-auto px-6">
-        <div class="space-y-5">
-          <!-- 基础配置 -->
-          <div class="space-y-4">
-            <h4 class="text-md font-medium text-gray-900 border-b border-gray-200 pb-2">基础配置</h4>
+    <div v-else class="flex-1 flex flex-col">
+      <!-- 根据Agent类型显示不同的配置表单 -->
+      <BrainstormAgentConfigForm
+        v-if="agent.type === 'brainstorm_agent'"
+        :agent-id="agent.id"
+        @save="handleSave"
+      />
+
+      <!-- QA Agent配置表单 -->
+      <form v-else @submit.prevent="handleSubmit" class="flex-1 flex flex-col">
+        <!-- 表单内容区域 -->
+        <div class="flex-1 overflow-y-auto px-6">
+          <div class="space-y-5">
+            <!-- 基础配置 -->
+            <div class="space-y-4">
+              <h4 class="text-md font-medium text-gray-900 border-b border-gray-200 pb-2">基础配置</h4>
 
             <!-- 模型名称 -->
             <div>
@@ -198,6 +207,7 @@
         </div>
       </div>
     </form>
+    </div>
   </div>
 </template>
 
@@ -206,6 +216,7 @@ import { ref, watch, onMounted } from 'vue'
 import { agentService } from '@/services/agent'
 import { useNotification } from '@/composables/useNotification'
 import type { Agent } from '@/types'
+import BrainstormAgentConfigForm from './BrainstormAgentConfigForm.vue'
 
 const props = defineProps<{
   agent: Agent
@@ -273,6 +284,11 @@ const loadConfig = async () => {
   } finally {
     configLoading.value = false
   }
+}
+
+// 处理BrainstormAgentConfigForm的保存事件
+const handleSave = () => {
+  emit('save')
 }
 
 // 保存配置

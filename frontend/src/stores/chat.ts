@@ -15,6 +15,7 @@ export const useChatStore = defineStore('chat', () => {
   const loading = ref(false)
   const wsConnected = ref(false)
   const streamingMessage = ref('')
+  const streamingMetadata = ref<any>(null)
   const isStreaming = ref(false)
   const isWaitingForResponse = ref(false)
 
@@ -146,6 +147,7 @@ export const useChatStore = defineStore('chat', () => {
         } else {
           // 流式响应
           streamingMessage.value += data.content
+          streamingMetadata.value = data.metadata
           isStreaming.value = true
         }
       })
@@ -155,6 +157,7 @@ export const useChatStore = defineStore('chat', () => {
         isStreaming.value = false
         isWaitingForResponse.value = false
         streamingMessage.value = ''
+        streamingMetadata.value = null
       })
 
     } catch (error) {
@@ -181,6 +184,7 @@ export const useChatStore = defineStore('chat', () => {
     // 设置等待响应状态
     isWaitingForResponse.value = true
     streamingMessage.value = ''
+    streamingMetadata.value = null
     isStreaming.value = false
 
     // 发送WebSocket消息
@@ -255,6 +259,7 @@ export const useChatStore = defineStore('chat', () => {
     loading,
     wsConnected,
     streamingMessage,
+    streamingMetadata,
     isStreaming,
     isWaitingForResponse,
 

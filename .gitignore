@@ -209,3 +209,4 @@ __marimo__/
 .augment
 /backend/ai_agent_platform.db
 /frontend/node_modules/
+backend/logs/*

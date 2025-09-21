@@ -7,7 +7,8 @@ from .user import (
 )
 from .agent import (
     AgentBase, AgentCreate, AgentUpdate, AgentResponse,
-    AgentConfigBase, AgentConfigCreate, AgentConfigUpdate, AgentConfigResponse
+    QAAgentConfigBase, QAAgentConfigCreate, QAAgentConfigUpdate, QAAgentConfigResponse,
+    BrainstormAgentConfigBase, BrainstormAgentConfigCreate, BrainstormAgentConfigUpdate, BrainstormAgentConfigResponse
 )
 from .session import (
     SessionBase, SessionCreate, SessionUpdate, SessionResponse,
@@ -22,7 +23,8 @@ __all__ = [
     
     # Agent schemas
     "AgentBase", "AgentCreate", "AgentUpdate", "AgentResponse",
-    "AgentConfigBase", "AgentConfigCreate", "AgentConfigUpdate", "AgentConfigResponse",
+    "QAAgentConfigBase", "QAAgentConfigCreate", "QAAgentConfigUpdate", "QAAgentConfigResponse",
+    "BrainstormAgentConfigBase", "BrainstormAgentConfigCreate", "BrainstormAgentConfigUpdate", "BrainstormAgentConfigResponse",
     "UserAgentConfigCreate", "UserAgentConfigResponse",
     
     # Session schemas

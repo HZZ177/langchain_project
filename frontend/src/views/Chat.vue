@@ -203,22 +203,33 @@
           <div
             v-for="conversation in chatStore.conversations"
             :key="conversation.id"
-            class="flex"
-            :class="{
-              'justify-end': conversation.message_type === 'user',
-              'justify-start': conversation.message_type === 'assistant'
-            }"
           >
+            <!-- 头脑风暴Agent的消息显示 -->
+            <BrainstormChatMessage
+              v-if="isBrainstormAgent && conversation.message_type === 'assistant'"
+              :message="conversation"
+            />
+
+            <!-- 普通消息显示 -->
             <div
-              class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg"
+              v-else
+              class="flex"
               :class="{
-                'bg-primary-600 text-white': conversation.message_type === 'user',
-                'bg-white border border-gray-200 text-gray-900': conversation.message_type === 'assistant'
+                'justify-end': conversation.message_type === 'user',
+                'justify-start': conversation.message_type === 'assistant'
               }"
             >
-              <div class="whitespace-pre-wrap">{{ conversation.content }}</div>
-              <div class="text-xs mt-1 opacity-70">
-                {{ formatTime(conversation.created_at) }}
+              <div
+                class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg"
+                :class="{
+                  'bg-primary-600 text-white': conversation.message_type === 'user',
+                  'bg-white border border-gray-200 text-gray-900': conversation.message_type === 'assistant'
+                }"
+              >
+                <div class="whitespace-pre-wrap">{{ conversation.content }}</div>
+                <div class="text-xs mt-1 opacity-70">
+                  {{ formatTime(conversation.created_at) }}
+                </div>
               </div>
             </div>
           </div>
@@ -227,14 +238,23 @@
           <LoadingBubble v-if="chatStore.isWaitingForResponse" />
 
           <!-- 流式消息 -->
-          <div v-if="chatStore.isStreaming && chatStore.streamingMessage" class="flex justify-start">
-            <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-white border border-gray-200 text-gray-900">
-              <div class="whitespace-pre-wrap">{{ chatStore.streamingMessage }}</div>
-              <div class="flex items-center mt-1">
-                <div class="flex space-x-1">
-                  <div class="w-1 h-1 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div class="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-                  <div class="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+          <div v-if="chatStore.isStreaming && chatStore.streamingMessage">
+            <!-- 头脑风暴Agent的流式消息 -->
+            <BrainstormChatMessage
+              v-if="isBrainstormAgent"
+              :message="{ content: chatStore.streamingMessage, metadata: chatStore.streamingMetadata }"
+            />
+
+            <!-- 普通Agent的流式消息 -->
+            <div v-else class="flex justify-start">
+              <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-white border border-gray-200 text-gray-900">
+                <div class="whitespace-pre-wrap">{{ chatStore.streamingMessage }}</div>
+                <div class="flex items-center mt-1">
+                  <div class="flex space-x-1">
+                    <div class="w-1 h-1 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div class="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                    <div class="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -291,13 +311,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { useNotification } from '@/composables/useNotification'
 import LoadingBubble from '@/components/LoadingBubble.vue'
 import AgentConfigModal from '@/components/AgentConfigModal.vue'
+import BrainstormChatMessage from '@/components/BrainstormChatMessage.vue'
 import type { Session } from '@/types'
 
 const router = useRouter()
@@ -316,6 +337,11 @@ const messageTextarea = ref<HTMLTextAreaElement>()
 // 输入框高度相关
 const textareaHeight = ref(56) // 默认高度（包含上方拖拽区域）
 const minHeight = 56 // 最小高度（包含上方拖拽区域）
+
+// 计算属性
+const isBrainstormAgent = computed(() => {
+  return chatStore.selectedAgent?.type === 'brainstorm_agent'
+})
 const maxHeight = 220 // 最大高度（包含上方拖拽区域）
 const isDragging = ref(false)
 const dragStartY = ref(0)

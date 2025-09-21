@@ -80,22 +80,50 @@ class PrewarmLLMPool:
     
     def prewarm_agent_pool(self, agent_id: str, agent_type: str, config: Dict[str, Any]):
         """为指定Agent预热连接池"""
+        if agent_type == "brainstorm_agent":
+            # 双模型Agent需要为两个模型分别预热连接池
+            model_a_config = {
+                "model_name": config.get("model_a_name"),
+                "temperature": config.get("model_a_temperature", 0.7),
+                "api_key": config.get("model_a_api_key"),
+                "base_url": config.get("model_a_base_url", "https://api.openai.com/v1"),
+                "max_tokens": config.get("max_tokens")
+            }
+
+            model_b_config = {
+                "model_name": config.get("model_b_name"),
+                "temperature": config.get("model_b_temperature", 0.7),
+                "api_key": config.get("model_b_api_key"),
+                "base_url": config.get("model_b_base_url", "https://api.openai.com/v1"),
+                "max_tokens": config.get("max_tokens")
+            }
+
+            # 为模型A预热连接池
+            self._prewarm_single_model(f"{agent_id}_model_a", agent_type, model_a_config)
+            # 为模型B预热连接池
+            self._prewarm_single_model(f"{agent_id}_model_b", agent_type, model_b_config)
+        else:
+            # 单模型Agent的原有逻辑
+            self._prewarm_single_model(agent_id, agent_type, config)
+
+    def _prewarm_single_model(self, agent_id: str, agent_type: str, config: Dict[str, Any]):
+        """为单个模型预热连接池"""
         with self.lock:
             if agent_id in self.pools:
                 logger.warning(f"Agent {agent_id} 的连接池已存在，跳过预热")
                 return
-            
+
             logger.info(f"开始为Agent预热连接池 - agent_id: {agent_id}, agent_type: {agent_type}")
-            
+
             # 创建连接队列
             pool = Queue(maxsize=self.pool_size_per_agent)
-            
+
             # 预创建连接
             for i in range(self.pool_size_per_agent):
                 try:
                     connection_id = f"{agent_id}_{agent_type}_{i}_{int(time.time())}"
                     llm = self._create_llm(config)
-                    
+
                     connection = LLMConnection(
                         llm=llm,
                         agent_id=agent_id,
@@ -104,16 +132,16 @@ class PrewarmLLMPool:
                         last_used=time.time(),
                         connection_id=connection_id
                     )
-                    
+
                     pool.put(connection)
                     self.stats["total_created"] += 1
                     self.stats["current_idle"] += 1
-                    
+
                     logger.info(f"预创建LLM连接 - connection_id: {connection_id}")
-                    
+
                 except Exception as e:
                     logger.error(f"预创建LLM连接失败 - agent_id: {agent_id}, 错误: {e}")
-            
+
             self.pools[agent_id] = pool
             logger.info(f"Agent连接池预热完成 - agent_id: {agent_id}, 连接数: {pool.qsize()}")
     
