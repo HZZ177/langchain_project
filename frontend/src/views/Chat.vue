@@ -284,26 +284,45 @@
         <!-- 输入区域 -->
         <div class="bg-white border-t border-gray-200 p-4 flex-shrink-0">
           <form @submit.prevent="sendMessage">
-            <div class="relative">
-              <!-- 输入容器 -->
-              <div class="relative border border-gray-300 rounded-2xl bg-white hover:border-gray-400 focus-within:border-gray-400 transition-colors duration-150">
+            <!-- 输入容器 -->
+            <div class="border border-gray-300 rounded-2xl bg-white hover:border-gray-400 focus-within:border-gray-400 transition-colors duration-150">
+              <!-- 文本输入区域 -->
+              <div class="px-4 py-1.5 flex items-center">
                 <textarea
                   ref="messageTextarea"
                   v-model="messageInput"
                   @input="autoResize"
                   @keydown.enter.exact.prevent="sendMessage"
-                  @keydown.enter.shift.exact="addNewLine"
+                  @keydown.enter.shift.exact.prevent="addNewLine"
                   :placeholder="chatStore.isStreaming || chatStore.isWaitingForResponse ? '可以继续输入，AI回复完成后即可发送...' : '你想知道什么？'"
-                  class="w-full min-h-[52px] max-h-[200px] px-4 py-3 pr-14 bg-transparent border-0 rounded-2xl resize-none focus:outline-none placeholder-gray-500 leading-6"
+                  class="w-full min-h-[40px] max-h-[200px] bg-transparent border-0 resize-none focus:outline-none placeholder-gray-500 leading-6 py-2"
                   :class="{ 'bg-gray-50': chatStore.isStreaming || chatStore.isWaitingForResponse }"
                   style="field-sizing: content;"
                 ></textarea>
+              </div>
 
-                <!-- 发送按钮 -->
+              <!-- 功能区域 -->
+              <div class="flex items-center justify-between px-4 py-1.5">
+                <!-- 左侧功能按钮区域 -->
+                <div class="flex items-center space-x-2">
+                  <!-- 上传文件按钮 -->
+                  <button
+                    type="button"
+                    @click="handleUploadClick"
+                    class="w-10 h-10 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 border border-gray-300 hover:border-gray-400 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400"
+                    title="上传文件"
+                  >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- 右侧发送按钮 -->
                 <button
                   type="submit"
                   :disabled="!messageInput.trim() || chatStore.isStreaming || chatStore.isWaitingForResponse"
-                  class="absolute bottom-2 right-2 w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400"
+                  class="w-10 h-10 rounded-full flex items-center justify-center transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400"
                   :class="[
                     messageInput.trim() && !chatStore.isStreaming && !chatStore.isWaitingForResponse
                       ? 'bg-gray-900 text-white hover:bg-gray-800'
@@ -312,12 +331,12 @@
                   :title="chatStore.isStreaming || chatStore.isWaitingForResponse ? 'AI正在回复中，请稍候...' : '发送消息'"
                 >
                   <!-- 加载状态 -->
-                  <svg v-if="chatStore.isStreaming || chatStore.isWaitingForResponse" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <svg v-if="chatStore.isStreaming || chatStore.isWaitingForResponse" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
                   <!-- 发送图标 -->
-                  <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
                 </button>
@@ -499,6 +518,10 @@ const autoResize = () => {
 
 const addNewLine = () => {
   messageInput.value += '\n'
+}
+
+const handleUploadClick = () => {
+  notification.info('文件上传功能开发中，敬请期待！')
 }
 
 

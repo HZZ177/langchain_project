@@ -112,6 +112,7 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
 import { useNotificationStore } from '@/stores/notification'
 
 const notificationStore = useNotificationStore()
@@ -140,17 +141,32 @@ const handleBackdropClick = () => {
   }
 }
 
-// ESC键关闭
+// ESC键关闭，Enter键确认
 const handleKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Escape' && notificationStore.modalVisible) {
+  if (!notificationStore.modalVisible) return
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
     if (notificationStore.modalOptions?.type === 'confirm') {
       handleCancel()
     } else {
       handleConfirm()
     }
+  } else if (event.key === 'Enter') {
+    event.preventDefault()
+    event.stopPropagation()
+    // Enter键触发确认操作
+    handleConfirm()
   }
 }
 
-// 监听键盘事件
-document.addEventListener('keydown', handleKeydown)
+// 生命周期管理键盘事件监听器
+onMounted(() => {
+  document.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeydown)
+})
 </script>
