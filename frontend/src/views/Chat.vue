@@ -132,8 +132,8 @@
         </div>
       </div>
 
-      <!-- 新建对话按钮 -->
-      <div class="border-t border-gray-200 p-4">
+      <!-- 新建对话按钮 - 选中Agent时显示 -->
+      <div v-if="chatStore.currentAgentId" class="border-t border-gray-200 p-4">
         <button
           @click="createNewChat"
           :disabled="!chatStore.currentAgentId"
@@ -157,32 +157,37 @@
 
     <!-- 主聊天区域 -->
     <div class="flex-1 flex flex-col">
-      <div v-if="!chatStore.currentSession" class="flex-1 flex items-center justify-center">
+      <div v-if="!chatStore.hasActiveChat" class="flex-1 flex items-center justify-center">
         <div class="text-center">
           <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.959 8.959 0 01-4.906-1.681L3 21l2.681-5.094A8.959 8.959 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
           </svg>
-          <h3 class="mt-2 text-sm font-medium text-gray-900">选择一个对话开始聊天</h3>
-          <p class="mt-1 text-sm text-gray-500">或者创建一个新的对话</p>
+          <h3 class="mt-2 text-sm font-medium text-gray-900">选择一个Agent开始聊天</h3>
+          <p class="mt-1 text-sm text-gray-500">选择上方的Agent即可开始对话</p>
         </div>
       </div>
 
-      <div v-else class="flex-1 flex flex-col">
+      <div v-else class="flex-1 flex flex-col min-h-0">
         <!-- 聊天头部 -->
-        <div class="bg-white border-b border-gray-200 p-4">
+        <div class="bg-white border-b border-gray-200 p-4 flex-shrink-0">
           <div class="flex items-center justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-gray-900">{{ chatStore.currentSession.name }}</h2>
+              <h2 class="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                <span>{{ chatStore.currentSession.name }}</span>
+                <span v-if="chatStore.currentSession.isTemporary" class="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">
+                  临时会话
+                </span>
+              </h2>
               <p class="text-sm text-gray-500">{{ chatStore.currentAgent?.name }}</p>
             </div>
             <div class="flex items-center space-x-2">
               <div class="flex items-center space-x-1">
                 <div
                   class="w-2 h-2 rounded-full"
-                  :class="chatStore.wsConnected ? 'bg-green-500' : 'bg-red-500'"
+                  :class="chatStore.wsConnected ? 'bg-green-500' : 'bg-yellow-500'"
                 ></div>
                 <span class="text-xs text-gray-500">
-                  {{ chatStore.wsConnected ? '已连接' : '未连接' }}
+                  {{ chatStore.wsConnected ? '已连接' : '待连接' }}
                 </span>
               </div>
               <button
@@ -199,108 +204,125 @@
         </div>
 
         <!-- 消息列表 -->
-        <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4">
-          <div
-            v-for="conversation in chatStore.conversations"
-            :key="conversation.id"
-          >
-            <!-- 头脑风暴Agent的消息显示 -->
-            <BrainstormChatMessage
-              v-if="isBrainstormAgent && conversation.message_type === 'assistant'"
-              :message="conversation"
+        <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+          <!-- 头脑风暴Agent的特殊显示 -->
+          <div v-if="isBrainstormAgent">
+            <!-- 显示历史讨论（除了当前正在进行的讨论） -->
+            <div v-for="(historySession, index) in chatStore.brainstormHistory" :key="`history-${index}`">
+              <!-- 只显示已完成的历史讨论，且不是当前正在进行的讨论 -->
+              <div v-if="historySession.isComplete && historySession !== chatStore.brainstormSession" class="mb-6">
+                <div class="text-xs text-gray-400 mb-2 flex items-center">
+                  <span class="mr-2">📝</span>
+                  <span>历史讨论 {{ chatStore.brainstormHistory.length - index }}</span>
+                  <div class="flex-1 border-t border-gray-200 ml-3"></div>
+                </div>
+                <BrainstormDiscussion :discussion-data="historySession" />
+              </div>
+            </div>
+
+            <!-- 显示当前的头脑风暴会话 -->
+            <BrainstormDiscussion
+              v-if="chatStore.brainstormSession || enhancedBrainstormData"
+              :discussion-data="enhancedBrainstormData || chatStore.brainstormSession"
             />
 
-            <!-- 普通消息显示 -->
-            <div
-              v-else
-              class="flex"
-              :class="{
-                'justify-end': conversation.message_type === 'user',
-                'justify-start': conversation.message_type === 'assistant'
-              }"
-            >
-              <div
-                class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg"
-                :class="{
-                  'bg-primary-600 text-white': conversation.message_type === 'user',
-                  'bg-white border border-gray-200 text-gray-900': conversation.message_type === 'assistant'
-                }"
-              >
-                <div class="whitespace-pre-wrap">{{ conversation.content }}</div>
-                <div class="text-xs mt-1 opacity-70">
-                  {{ formatTime(conversation.created_at) }}
-                </div>
-              </div>
+            <!-- Loading状态 -->
+            <div v-if="chatStore.isWaitingForResponse && !chatStore.brainstormSession" class="text-center py-8">
+              <LoadingBubble />
+              <p class="text-sm text-gray-500 mt-2">正在初始化双模型讨论...</p>
             </div>
           </div>
 
-          <!-- Loading气泡 -->
-          <LoadingBubble v-if="chatStore.isWaitingForResponse" />
-
-          <!-- 流式消息 -->
-          <div v-if="chatStore.isStreaming && chatStore.streamingMessage">
-            <!-- 头脑风暴Agent的流式消息 -->
-            <BrainstormChatMessage
-              v-if="isBrainstormAgent"
-              :message="{ content: chatStore.streamingMessage, metadata: chatStore.streamingMetadata }"
+          <!-- 普通Agent的消息显示 -->
+          <div v-else>
+            <!-- 历史消息 -->
+            <ChatMessage
+              v-for="conversation in chatStore.conversations"
+              :key="conversation.id"
+              :message="{
+                message_type: conversation.message_type,
+                content: conversation.content,
+                timestamp: conversation.created_at
+              }"
             />
 
-            <!-- 普通Agent的流式消息 -->
-            <div v-else class="flex justify-start">
-              <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-white border border-gray-200 text-gray-900">
-                <div class="whitespace-pre-wrap">{{ chatStore.streamingMessage }}</div>
-                <div class="flex items-center mt-1">
-                  <div class="flex space-x-1">
-                    <div class="w-1 h-1 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div class="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-                    <div class="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+            <!-- Loading状态 -->
+            <div v-if="chatStore.isWaitingForResponse && !chatStore.isStreaming" class="flex justify-start">
+              <div class="flex items-center gap-3">
+                <div class="avatar">
+                  <div class="w-9 h-9 bg-gray-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                    AI
+                  </div>
+                </div>
+                <div class="bg-white border border-gray-200 rounded-2xl px-4 py-3">
+                  <div class="flex items-center space-x-2">
+                    <div class="flex space-x-1">
+                      <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                      <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                      <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    </div>
+                    <span class="text-sm text-gray-500">AI正在思考...</span>
                   </div>
                 </div>
               </div>
             </div>
+
+            <!-- 流式消息 -->
+            <ChatMessage
+              v-if="chatStore.isStreaming && chatStore.streamingMessage"
+              :message="{
+                message_type: 'assistant',
+                content: chatStore.streamingMessage,
+                timestamp: new Date().toISOString()
+              }"
+              :is-streaming="true"
+              :show-header="false"
+            />
           </div>
         </div>
 
         <!-- 输入区域 -->
-        <div class="bg-white border-t border-gray-200 p-4">
-          <form @submit.prevent="sendMessage" class="flex space-x-4">
-            <div class="flex-1">
-              <div class="relative">
-                <!-- 拖拽手柄 -->
-                <div
-                  class="absolute top-0 left-0 right-0 h-4 cursor-ns-resize flex items-center justify-center group hover:bg-gray-50 transition-colors duration-200 z-10"
-                  @mousedown="startDragging"
-                  title="向上拖拽增加输入框高度"
-                >
-                  <div class="w-12 h-1 bg-gray-300 rounded-full group-hover:bg-gray-500 transition-colors duration-200"></div>
-                </div>
-
+        <div class="bg-white border-t border-gray-200 p-4 flex-shrink-0">
+          <form @submit.prevent="sendMessage">
+            <div class="relative">
+              <!-- 输入容器 -->
+              <div class="relative border border-gray-300 rounded-2xl bg-white hover:border-gray-400 focus-within:border-gray-400 transition-colors duration-150">
                 <textarea
                   ref="messageTextarea"
                   v-model="messageInput"
-                  @input="adjustTextareaHeight"
+                  @input="autoResize"
                   @keydown.enter.exact.prevent="sendMessage"
                   @keydown.enter.shift.exact="addNewLine"
-                  placeholder="输入消息... (Enter发送，Shift+Enter换行)"
-                  rows="1"
-                  :style="{ height: textareaHeight + 'px', paddingTop: '20px' }"
-                  :class="[
-                    'w-full px-3 pb-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none',
-                    { 'transition-all duration-200 ease-in-out': !isDragging }
-                  ]"
-                  :disabled="!chatStore.wsConnected || chatStore.isStreaming || chatStore.isWaitingForResponse"
+                  :placeholder="chatStore.isStreaming || chatStore.isWaitingForResponse ? '可以继续输入，AI回复完成后即可发送...' : '你想知道什么？'"
+                  class="w-full min-h-[52px] max-h-[200px] px-4 py-3 pr-14 bg-transparent border-0 rounded-2xl resize-none focus:outline-none placeholder-gray-500 leading-6"
+                  :class="{ 'bg-gray-50': chatStore.isStreaming || chatStore.isWaitingForResponse }"
+                  style="field-sizing: content;"
                 ></textarea>
+
+                <!-- 发送按钮 -->
+                <button
+                  type="submit"
+                  :disabled="!messageInput.trim() || chatStore.isStreaming || chatStore.isWaitingForResponse"
+                  class="absolute bottom-2 right-2 w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400"
+                  :class="[
+                    messageInput.trim() && !chatStore.isStreaming && !chatStore.isWaitingForResponse
+                      ? 'bg-gray-900 text-white hover:bg-gray-800'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  ]"
+                  :title="chatStore.isStreaming || chatStore.isWaitingForResponse ? 'AI正在回复中，请稍候...' : '发送消息'"
+                >
+                  <!-- 加载状态 -->
+                  <svg v-if="chatStore.isStreaming || chatStore.isWaitingForResponse" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <!-- 发送图标 -->
+                  <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </button>
               </div>
             </div>
-            <button
-              type="submit"
-              :disabled="!messageInput.trim() || !chatStore.wsConnected || chatStore.isStreaming || chatStore.isWaitingForResponse"
-              class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            </button>
           </form>
         </div>
       </div>
@@ -318,7 +340,8 @@ import { useChatStore } from '@/stores/chat'
 import { useNotification } from '@/composables/useNotification'
 import LoadingBubble from '@/components/LoadingBubble.vue'
 import AgentConfigModal from '@/components/AgentConfigModal.vue'
-import BrainstormChatMessage from '@/components/BrainstormChatMessage.vue'
+import BrainstormDiscussion from '@/components/BrainstormDiscussion.vue'
+import ChatMessage from '@/components/ChatMessage.vue'
 import type { Session } from '@/types'
 
 const router = useRouter()
@@ -334,20 +357,50 @@ const messageInput = ref('')
 const messagesContainer = ref<HTMLElement>()
 const messageTextarea = ref<HTMLTextAreaElement>()
 
-// 输入框高度相关
-const textareaHeight = ref(56) // 默认高度（包含上方拖拽区域）
-const minHeight = 56 // 最小高度（包含上方拖拽区域）
+// 滚动状态管理
+const isUserScrolling = ref(false) // 用户是否主动滚动
+const isNearBottom = ref(true) // 是否在底部附近
+const scrollThreshold = 100 // 距离底部多少像素认为是"接近底部"
 
 // 计算属性
 const isBrainstormAgent = computed(() => {
-  return chatStore.selectedAgent?.type === 'brainstorm_agent'
+  return chatStore.currentAgent?.type === 'brainstorm_agent'
 })
-const maxHeight = 220 // 最大高度（包含上方拖拽区域）
-const isDragging = ref(false)
-const dragStartY = ref(0)
-const dragStartHeight = ref(0)
-const animationFrameId = ref<number | null>(null)
 
+const userMessages = computed(() => {
+  return chatStore.conversations.filter(conv => conv.message_type === 'user')
+})
+
+// 增强的头脑风暴数据，确保即使后端没有正确初始化也能显示用户主题
+const enhancedBrainstormData = computed(() => {
+  // 优先使用store中的头脑风暴会话数据
+  if (chatStore.brainstormSession) {
+    return chatStore.brainstormSession
+  }
+
+  // 如果没有头脑风暴会话但有用户消息，且没有任何助手消息，创建一个基础的会话数据
+  // 这种情况通常发生在刚发送消息但还没收到响应时
+  if (isBrainstormAgent.value && userMessages.value.length > 0) {
+    const hasAssistantMessages = chatStore.conversations.some(conv => conv.message_type === 'assistant')
+
+    if (!hasAssistantMessages) {
+      const lastUserMessage = userMessages.value[userMessages.value.length - 1]
+      return {
+        topic: lastUserMessage.content,
+        config: {
+          model_a: "GPT-4",
+          model_b: "Claude-3",
+          style: "collaborative" as const,
+          max_rounds: 3
+        },
+        rounds: [],
+        isComplete: false
+      }
+    }
+  }
+
+  return null
+})
 // 生命周期
 onMounted(async () => {
   // 获取Agent列表和会话列表
@@ -356,38 +409,38 @@ onMounted(async () => {
     chatStore.fetchSessions()
   ])
 
-  // 如果当前Agent下有会话但没有当前会话，选择第一个
-  if (chatStore.sortedSessions.length > 0 && !chatStore.currentSession) {
-    await selectSession(chatStore.sortedSessions[0])
-  }
-
-  // 初始化输入框高度
+  // 添加滚动事件监听器
   nextTick(() => {
-    if (messageTextarea.value) {
-      messageTextarea.value.style.height = minHeight + 'px'
+    if (messagesContainer.value) {
+      messagesContainer.value.addEventListener('scroll', handleScroll, { passive: true })
     }
   })
 })
 
 onUnmounted(() => {
+  // 清理临时会话
+  chatStore.clearTemporarySession()
+
   // 断开WebSocket连接
   chatStore.disconnectWebSocket()
 
-  // 清理拖拽相关资源
-  if (animationFrameId.value) {
-    cancelAnimationFrame(animationFrameId.value)
+  // 清理资源
+
+  // 移除滚动事件监听器
+  if (messagesContainer.value) {
+    messagesContainer.value.removeEventListener('scroll', handleScroll)
   }
-  document.removeEventListener('mousemove', handleDragging)
-  document.removeEventListener('mouseup', stopDragging)
-  document.body.style.userSelect = ''
 })
 
-// 监听对话变化，自动滚动到底部
+// 监听对话变化，智能滚动到底部
 watch(
-  () => [chatStore.conversations, chatStore.streamingMessage, chatStore.isWaitingForResponse],
+  () => [chatStore.conversations, chatStore.streamingMessage, chatStore.isWaitingForResponse, chatStore.brainstormSession],
   () => {
     nextTick(() => {
-      scrollToBottom()
+      // 只有在用户位于底部附近时才自动滚动
+      if (isNearBottom.value && !isUserScrolling.value) {
+        scrollToBottom(false) // false表示这是自动滚动
+      }
     })
   },
   { deep: true }
@@ -399,9 +452,13 @@ const handleLogout = async () => {
   router.push('/login')
 }
 
-const selectAgent = (agentId: number) => {
-  chatStore.setCurrentAgent(agentId)
-  showAgentDropdown.value = false
+const selectAgent = async (agentId: number) => {
+  try {
+    await chatStore.setCurrentAgent(agentId)
+    showAgentDropdown.value = false
+  } catch (error) {
+    notification.handleError(error, '选择Agent失败')
+  }
 }
 
 const selectSession = async (session: Session) => {
@@ -424,101 +481,27 @@ const createNewChat = async () => {
 
 const sendMessage = async () => {
   const content = messageInput.value.trim()
-  if (!content || !chatStore.wsConnected || chatStore.isStreaming || chatStore.isWaitingForResponse) return
+  if (!content || chatStore.isStreaming || chatStore.isWaitingForResponse) return
 
   try {
     await chatStore.sendMessage(content)
     messageInput.value = ''
-    // 重置输入框高度
-    textareaHeight.value = minHeight
-    if (messageTextarea.value) {
-      messageTextarea.value.style.height = minHeight + 'px'
-    }
   } catch (error) {
     notification.handleError(error, '发送消息失败')
   }
 }
 
+// 简单的自动调整高度函数
+const autoResize = () => {
+  // 新的CSS方案使用field-sizing: content，浏览器自动处理高度
+  // 这里可以添加任何需要的额外逻辑
+}
+
 const addNewLine = () => {
   messageInput.value += '\n'
-  // 添加换行后调整高度
-  nextTick(() => {
-    adjustTextareaHeight()
-  })
 }
 
-// 自动调整textarea高度
-const adjustTextareaHeight = () => {
-  if (!messageTextarea.value || isDragging.value) return
 
-  // 使用requestAnimationFrame优化性能
-  requestAnimationFrame(() => {
-    if (!messageTextarea.value) return
-
-    // 重置高度以获取正确的scrollHeight
-    messageTextarea.value.style.height = 'auto'
-
-    // 计算新高度（scrollHeight + 拖拽区域高度16px）
-    const scrollHeight = messageTextarea.value.scrollHeight
-    const newHeight = Math.max(minHeight, Math.min(maxHeight, scrollHeight + 16))
-
-    // 只更新响应式变量
-    textareaHeight.value = newHeight
-  })
-}
-
-// 开始拖拽
-const startDragging = (event: MouseEvent) => {
-  event.preventDefault()
-  isDragging.value = true
-  dragStartY.value = event.clientY
-  dragStartHeight.value = textareaHeight.value
-
-  // 添加全局事件监听
-  document.addEventListener('mousemove', handleDragging, { passive: true })
-  document.addEventListener('mouseup', stopDragging)
-
-  // 防止文本选择
-  document.body.style.userSelect = 'none'
-}
-
-// 处理拖拽（使用requestAnimationFrame优化）
-const handleDragging = (event: MouseEvent) => {
-  if (!isDragging.value) return
-
-  // 取消之前的动画帧
-  if (animationFrameId.value) {
-    cancelAnimationFrame(animationFrameId.value)
-  }
-
-  // 使用requestAnimationFrame确保流畅的动画
-  animationFrameId.value = requestAnimationFrame(() => {
-    // 向上拖拽（deltaY为负）增加高度，向下拖拽（deltaY为正）减少高度
-    const deltaY = event.clientY - dragStartY.value
-    const newHeight = Math.max(minHeight, Math.min(maxHeight, dragStartHeight.value - deltaY))
-
-    // 只更新响应式变量，让Vue处理DOM更新
-    textareaHeight.value = newHeight
-  })
-}
-
-// 停止拖拽
-const stopDragging = () => {
-  isDragging.value = false
-
-  // 取消动画帧
-  if (animationFrameId.value) {
-    cancelAnimationFrame(animationFrameId.value)
-    animationFrameId.value = null
-  }
-
-  // 移除全局事件监听
-  document.removeEventListener('mousemove', handleDragging)
-  document.removeEventListener('mouseup', stopDragging)
-
-  // 恢复文本选择
-  document.body.style.userSelect = ''
-}
 
 const deleteSession = async (sessionId: number) => {
   const confirmed = await notification.confirm({
@@ -571,10 +554,37 @@ const handleConfigSaved = () => {
   showConfigModal.value = false
 }
 
-const scrollToBottom = () => {
+const scrollToBottom = (isUserAction = true) => {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+
+    // 如果是用户主动操作，更新状态
+    if (isUserAction) {
+      isNearBottom.value = true
+      isUserScrolling.value = false
+    }
   }
+}
+
+// 检查是否接近底部
+const checkIfNearBottom = () => {
+  if (!messagesContainer.value) return
+
+  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+
+  isNearBottom.value = distanceFromBottom <= scrollThreshold
+}
+
+// 处理用户滚动事件
+const handleScroll = () => {
+  isUserScrolling.value = true
+  checkIfNearBottom()
+
+  // 500ms后重置用户滚动状态，允许自动滚动
+  setTimeout(() => {
+    isUserScrolling.value = false
+  }, 500)
 }
 
 // 点击外部关闭菜单
@@ -590,9 +600,47 @@ const handleClickOutside = (event: Event) => {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+
+  // 确保滚动事件监听器被正确添加
+  nextTick(() => {
+    if (messagesContainer.value && !messagesContainer.value.onscroll) {
+      messagesContainer.value.addEventListener('scroll', handleScroll, { passive: true })
+    }
+  })
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
 })
 </script>
+
+<style scoped>
+/* 自定义消息容器滚动条样式 */
+.overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e0 #f7fafc;
+}
+
+.overflow-y-auto::-webkit-scrollbar {
+  width: 8px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: #f7fafc;
+  border-radius: 4px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 4px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+/* 确保flex容器正确处理高度 */
+.min-h-0 {
+  min-height: 0;
+}
+</style>

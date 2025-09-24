@@ -1,7 +1,7 @@
 <template>
-  <div class="flex-1 flex flex-col">
+  <div class="h-full flex flex-col">
     <!-- 表单内容区域 -->
-    <div class="flex-1 overflow-y-auto px-6">
+    <div class="flex-1 overflow-y-auto px-6 py-4">
       <div class="space-y-5">
         <!-- 错误提示 -->
         <div v-if="error" class="p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -362,7 +362,7 @@ const loadConfig = async () => {
     // 更新表单数据
     Object.keys(formData.value).forEach(key => {
       if (config[key] !== undefined) {
-        formData.value[key] = config[key]
+        (formData.value as any)[key] = config[key]
       }
     })
   } catch (err) {

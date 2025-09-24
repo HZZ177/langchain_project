@@ -48,6 +48,14 @@ export interface Session {
   is_active: boolean
   created_at: string
   updated_at: string
+  // 新增：临时会话标识
+  isTemporary?: boolean
+}
+
+// 临时会话类型（用于前端状态管理）
+export interface TemporarySession extends Omit<Session, 'id'> {
+  id: number // 使用负数ID标识临时会话
+  isTemporary: true
 }
 
 export interface Conversation {

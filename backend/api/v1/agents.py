@@ -4,6 +4,7 @@ Agent相关API
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from backend.core.logger import logger
 from backend.data.database import get_db
 from backend.data.schemas import AgentResponse, AgentCreate, AgentUpdate
 from backend.data.models import User
@@ -190,7 +191,15 @@ async def update_agent_config(
         # 清除Agent实例缓存，确保新配置生效
         agent_manager.remove_agent_from_cache(str(agent_id), agent.type)
 
-        return {"message": "配置更新成功"}
+        # 立即预热新配置的连接池
+        try:
+            logger.info(f"配置更新后立即预热Agent连接池 - agent_id: {agent_id}")
+            agent_manager.prewarm_single_agent(str(agent_id), agent.type, config_data)
+            logger.info(f"Agent连接池预热完成 - agent_id: {agent_id}")
+        except Exception as e:
+            logger.warning(f"预热Agent连接池失败，将在首次使用时动态创建 - agent_id: {agent_id}, 错误: {e}")
+
+        return {"message": "配置更新成功，连接池已预热"}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

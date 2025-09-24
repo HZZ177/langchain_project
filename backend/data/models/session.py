@@ -1,7 +1,7 @@
 """
 会话和对话数据模型
 """
-from sqlalchemy import Column, Integer, BigInteger, String, Boolean, DateTime, Text, func, ForeignKey, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Boolean, DateTime, Text, func, ForeignKey, JSON, text
 from sqlalchemy.orm import relationship
 from backend.data.database import Base
 
@@ -15,8 +15,8 @@ class Session(Base):
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
     name = Column(String(200), default='新对话')
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime, server_default=text("datetime('now', 'localtime')"))
+    updated_at = Column(DateTime, server_default=text("datetime('now', 'localtime')"), onupdate=text("datetime('now', 'localtime')"))
     
     # 关系
     user = relationship("User", backref="sessions")
@@ -35,7 +35,7 @@ class Conversation(Base):
     message_type = Column(String(20), nullable=False)  # 'user', 'assistant', 'system'
     content = Column(Text, nullable=False)
     extra_data = Column(JSON)  # 存储额外信息
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime, server_default=text("datetime('now', 'localtime')"))
     
     # 关系
     session = relationship("Session", backref="conversations")

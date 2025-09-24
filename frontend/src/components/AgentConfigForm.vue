@@ -1,7 +1,7 @@
 <template>
   <div class="h-full flex flex-col">
     <!-- 头部信息 -->
-    <div class="flex-shrink-0 p-6 pb-4">
+    <div class="flex-shrink-0 p-6 pb-4 border-b border-gray-200">
       <h3 class="text-lg font-medium text-gray-900">{{ agent.name }}</h3>
       <p class="text-sm text-gray-500 mt-1">{{ agent.description }}</p>
     </div>
@@ -18,18 +18,19 @@
     </div>
 
     <!-- 配置表单 -->
-    <div v-else class="flex-1 flex flex-col">
+    <div v-else class="flex-1 flex flex-col min-h-0">
       <!-- 根据Agent类型显示不同的配置表单 -->
       <BrainstormAgentConfigForm
         v-if="agent.type === 'brainstorm_agent'"
         :agent-id="agent.id"
         @save="handleSave"
+        @cancel="handleCancel"
       />
 
       <!-- QA Agent配置表单 -->
-      <form v-else @submit.prevent="handleSubmit" class="flex-1 flex flex-col">
+      <form v-else @submit.prevent="handleSubmit" class="h-full flex flex-col">
         <!-- 表单内容区域 -->
-        <div class="flex-1 overflow-y-auto px-6">
+        <div class="flex-1 overflow-y-auto px-6 py-4">
           <div class="space-y-5">
             <!-- 基础配置 -->
             <div class="space-y-4">
@@ -289,6 +290,11 @@ const loadConfig = async () => {
 // 处理BrainstormAgentConfigForm的保存事件
 const handleSave = () => {
   emit('save')
+}
+
+// 处理BrainstormAgentConfigForm的取消事件
+const handleCancel = () => {
+  emit('cancel')
 }
 
 // 保存配置

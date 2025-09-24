@@ -27,7 +27,7 @@ logger.configure(
             "enqueue": False,  # 关闭多线程安全队列
         },
         {
-            "sink": f"{log_path}/yongce_pro_c_engine_{{time:YYYY-MM-DD_HH}}.log",  # 指定日志输出到文件
+            "sink": f"{log_path}/langchain_project_{{time:YYYY-MM-DD_HH}}.log",  # 指定日志输出到文件
             "level": "DEBUG",  # 日志级别
             "format": "{time:YYYY-MM-DD HH:mm:ss.SSSS} | {module}:{line} | {level} | {message}",  # 日志格式
             "rotation": "1 hour",  # 每小时自动分割日志

@@ -4,10 +4,12 @@
 from .user import User
 from .agent import Agent
 from .session import Session, Conversation
+from .system_config import SystemConfig
 
 __all__ = [
     "User",
     "Agent",
     "Session",
-    "Conversation"
+    "Conversation",
+    "SystemConfig"
 ]

@@ -24,7 +24,7 @@ class AgentConfig(BaseModel):
     """Agent配置基类"""
     model_config = {"protected_namespaces": ()}
 
-    model_name: str = "gpt-3.5-turbo"
+    model_name: str = "gemini-2.5-flash-preview-05-20"
     temperature: float = 0.7
     max_tokens: Optional[int] = None
     api_key: Optional[str] = None

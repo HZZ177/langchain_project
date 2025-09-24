@@ -41,11 +41,11 @@ class AgentResponse(AgentBase):
 # QA Agent配置模型
 class QAAgentConfigBase(BaseModel):
     """QA Agent配置基础模型"""
-    model_name: str = "gpt-4"
+    model_name: str = "gemini-2.5-flash-preview-05-20"
     temperature: float = 0.7
     max_tokens: Optional[int] = None
     api_key: str
-    base_url: str = "https://linjinpeng-veloera.hf.space/v1"
+    base_url: str = "https://x666.me/v1"
     system_prompt: Optional[str] = None
     max_conversation_rounds: int = 5
 
@@ -81,10 +81,10 @@ class QAAgentConfigResponse(QAAgentConfigBase):
 class BrainstormAgentConfigBase(BaseModel):
     """Brainstorm Agent配置基础模型"""
     # 模型A配置
-    model_a_name: str = "gpt-4"
+    model_a_name: str = "gemini-2.5-flash-preview-05-20"
     model_a_temperature: float = 0.7
     model_a_api_key: str
-    model_a_base_url: str = "https://linjinpeng-veloera.hf.space/v1"
+    model_a_base_url: str = "https://x666.me/v1"
     model_a_system_prompt: Optional[str] = None
 
     # 模型B配置

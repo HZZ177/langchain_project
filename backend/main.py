@@ -10,8 +10,10 @@ from backend.data.models import Agent
 from backend.data.models.agent import QAAgentConfig, BrainstormAgentConfig
 from backend.services.auth_service import AuthService
 from backend.services.agent_service import AgentService
+from backend.services.session_title_service import get_title_service
+from backend.services.system_config_service import get_system_config_service
 from backend.agents.agent_manager import agent_manager
-from backend.api.v1 import auth, agents, sessions, websocket, pool
+from backend.api.v1 import auth, agents, sessions, websocket, pool, system
 from backend.core.logger import logger
 
 settings = get_settings()
@@ -39,6 +41,26 @@ async def lifespan(app: FastAPI):
 
     # 预热Agent连接池
     await prewarm_agent_pools()
+
+    # 初始化系统配置
+    try:
+        db = next(get_db())
+        system_config_service = get_system_config_service(db)
+        system_config_service.init_default_configs()
+        logger.info("系统配置初始化完成")
+        db.close()
+    except Exception as e:
+        logger.error(f"初始化系统配置失败: {e}")
+
+    # 初始化会话标题生成服务
+    try:
+        db = next(get_db())
+        get_title_service(db)
+        db.close()
+    except Exception as e:
+        logger.error(f"初始化会话标题生成服务失败: {e}")
+        # 创建未初始化的服务实例作为后备
+        get_title_service()
 
     logger.info("AI Agent平台启动完成")
 
@@ -251,6 +273,7 @@ app.include_router(agents.router, prefix="/api/v1/agents", tags=["Agent管理"])
 app.include_router(sessions.router, prefix="/api/v1/sessions", tags=["会话管理"])
 app.include_router(websocket.router, prefix="/api/v1", tags=["WebSocket"])
 app.include_router(pool.router, prefix="/api/v1/pool", tags=["连接池监控"])
+app.include_router(system.router, prefix="/api/v1/system", tags=["系统配置"])
 
 
 @app.get("/")
@@ -275,7 +298,6 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("启动服务")
     uvicorn.run(
         "backend.main:app",
         host="0.0.0.0",

@@ -8,6 +8,7 @@ from backend.agents.agent_manager import agent_manager
 from backend.agents.base_agent import AgentMessage
 from backend.services.session_service import SessionService, ConversationService
 from backend.services.agent_service import AgentService
+from backend.services.session_title_service import get_title_service
 from backend.data.schemas import ConversationCreate
 from backend.core.logger import logger
 from .manager import WebSocketManager
@@ -114,15 +115,98 @@ class MessageRouter:
                     full_response += response.content
                 
                 # 如果是最终响应，保存到数据库
-                if response.is_final and full_response:
-                    conversation_service.create_conversation(
-                        ConversationCreate(
-                            session_id=session_info.id,
-                            message_type="assistant",
-                            content=full_response,
-                            metadata=response.metadata
-                        )
-                    )
+                if response.is_final:
+                    # 检查是否是头脑风暴Agent
+                    if agent.__class__.__name__ == 'BrainstormAgent':
+                        # 头脑风暴Agent需要特殊处理
+                        if response.metadata and response.metadata.get("discussion_phase") == "complete":
+                            # 构建完整的头脑风暴会话数据
+                            discussion_history = response.metadata.get("discussion_history", [])
+
+                            # 从讨论历史重建头脑风暴会话结构
+                            brainstorm_session = {
+                                "topic": validated_message["content"],  # 用户输入的主题
+                                "config": {
+                                    "model_a": agent.config_dict.get('model_a_name', 'gemini-2.5-flash-preview-05-20'),
+                                    "model_b": agent.config_dict.get('model_b_name', 'Claude-3'),
+                                    "style": agent.config_dict.get('discussion_style', 'collaborative'),
+                                    "max_rounds": agent.config_dict.get('max_discussion_rounds', 5)
+                                },
+                                "rounds": [],
+                                "summary": "",
+                                "isComplete": True
+                            }
+
+                            # 重建轮次数据
+                            current_round = None
+                            for item in discussion_history:
+                                round_num = item["round"]
+                                speaker = item["speaker"]
+                                content = item["content"]
+
+                                # 如果是新轮次，创建新的轮次对象
+                                if not current_round or current_round["round"] != round_num:
+                                    if current_round:
+                                        brainstorm_session["rounds"].append(current_round)
+                                    current_round = {
+                                        "round": round_num,
+                                        "modelA": {"content": "", "isStreaming": False, "isComplete": False},
+                                        "modelB": {"content": "", "isStreaming": False, "isComplete": False}
+                                    }
+
+                                # 填充对应模型的内容
+                                if speaker == "model_a":
+                                    current_round["modelA"]["content"] = content
+                                    current_round["modelA"]["isComplete"] = True
+                                elif speaker == "model_b":
+                                    current_round["modelB"]["content"] = content
+                                    current_round["modelB"]["isComplete"] = True
+
+                            # 添加最后一轮
+                            if current_round:
+                                brainstorm_session["rounds"].append(current_round)
+
+                            # 从metadata中获取总结内容
+                            summary_content = response.metadata.get("summary_content", "")
+                            if summary_content:
+                                brainstorm_session["summary"] = summary_content.strip()
+                                logger.info(f"获取到总结内容，长度: {len(summary_content)}")
+                            else:
+                                logger.warning("未获取到总结内容")
+
+                            logger.info(f"保存头脑风暴会话数据: {len(brainstorm_session['rounds'])}轮讨论，总结长度: {len(brainstorm_session['summary'])}")
+
+                            # 保存头脑风暴会话数据
+                            conversation_service.create_conversation(
+                                ConversationCreate(
+                                    session_id=session_info.id,
+                                    message_type="assistant",
+                                    content=json.dumps(brainstorm_session, ensure_ascii=False),
+                                    extra_data={"type": "brainstorm_session"}
+                                )
+                            )
+                        else:
+                            logger.warning("头脑风暴Agent最终响应缺少完整的讨论数据")
+                    else:
+                        # 普通Agent的处理逻辑
+                        if full_response:
+                            conversation_service.create_conversation(
+                                ConversationCreate(
+                                    session_id=session_info.id,
+                                    message_type="assistant",
+                                    content=full_response
+                                )
+                            )
+
+                    # 异步触发会话标题生成（不阻塞当前流程）
+                    try:
+                        title_service = get_title_service()
+                        # 使用asyncio.create_task在后台异步执行
+                        import asyncio
+                        asyncio.create_task(title_service.generate_title_async(session_info.id, db))
+                        logger.debug(f"已触发会话 {session_info.id} 的标题生成任务")
+                    except Exception as title_error:
+                        logger.error(f"触发标题生成失败: {title_error}")
 
         except Exception as e:
             logger.error(f"消息路由处理异常: {e}")

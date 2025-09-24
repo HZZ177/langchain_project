@@ -27,10 +27,10 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     """创建访问令牌"""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
-    
+        expire = datetime.now() + timedelta(minutes=settings.access_token_expire_minutes)
+
     to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encoded_jwt
@@ -40,10 +40,10 @@ def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) 
     """创建刷新令牌"""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(days=settings.refresh_token_expire_days)
-    
+        expire = datetime.now() + timedelta(days=settings.refresh_token_expire_days)
+
     to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encoded_jwt
@@ -60,7 +60,7 @@ def verify_token(token: str, token_type: str = "access") -> Optional[dict]:
             
         # 检查过期时间
         exp = payload.get("exp")
-        if exp is None or datetime.utcnow() > datetime.fromtimestamp(exp):
+        if exp is None or datetime.now() > datetime.fromtimestamp(exp):
             return None
             
         return payload

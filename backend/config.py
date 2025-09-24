@@ -27,10 +27,10 @@ class Settings:
         self.admin_email: str = "admin@example.com"
         self.admin_password: str = "admin123"
 
-
-
         # CORS配置
         self.allowed_origins: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+
 
 
 # 全局配置实例

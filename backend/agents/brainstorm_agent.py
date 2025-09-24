@@ -26,7 +26,17 @@ class BrainstormAgent(BaseAgent):
             "model_b": None
         }
         logger.info(f"BrainstormAgent初始化 - agent_id: {agent_id}")
-    
+
+    def update_config(self, new_config: Dict[str, Any]):
+        """更新Agent配置"""
+        logger.info(f"更新BrainstormAgent配置 - agent_id: {self.agent_id}")
+        self.config_dict = new_config
+        # 清除当前连接，强制重新获取
+        self.current_connections = {
+            "model_a": None,
+            "model_b": None
+        }
+
     def _get_llm_connection(self, model_key: str) -> LLMConnection:
         """从连接池获取指定模型的LLM连接"""
         if not self.agent_id:
@@ -174,14 +184,16 @@ class BrainstormAgent(BaseAgent):
                     break
 
             # 生成讨论总结
+            summary_content = ""
             if enable_summary:
                 yield AgentResponse(
-                    content="## 📝 讨论总结\n\n",
+                    content="## 讨论总结\n\n",
                     is_final=False,
                     metadata={"discussion_phase": "summary_start"}
                 )
-                
+
                 async for chunk in self._generate_summary(llm_a, message.content, discussion_history):
+                    summary_content += chunk
                     yield AgentResponse(
                         content=chunk,
                         is_final=False,
@@ -195,7 +207,8 @@ class BrainstormAgent(BaseAgent):
                 metadata={
                     "discussion_phase": "complete",
                     "total_rounds": len(discussion_history) // 2,
-                    "discussion_history": discussion_history
+                    "discussion_history": discussion_history,
+                    "summary_content": summary_content  # 添加完整的总结内容
                 }
             )
 
@@ -222,11 +235,37 @@ class BrainstormAgent(BaseAgent):
         style: str
     ) -> AsyncIterator[str]:
         """获取指定模型的响应"""
+        import time
+
         messages = self._build_discussion_messages(topic, history, model_role, round_num, style)
+
+        # 记录开始时间和基本信息
+        start_time = time.time()
+        total_length = 0
+        chunk_count = 0
+
+        logger.info(f"🤖 开始调用LLM - 模型: {model_role}, 轮次: {round_num}, "
+                   f"agent_id: {self.agent_id}, 消息数: {len(messages)}")
 
         async for chunk in llm.astream(messages):
             if chunk.content:
+                chunk_count += 1
+                total_length += len(chunk.content)
+
+                # 每10个chunk或每100个字符记录一次进度
+                if chunk_count % 10 == 0 or total_length % 100 == 0:
+                    elapsed = time.time() - start_time
+                    logger.info(f"📝 LLM响应进度 - 模型: {model_role}, 轮次: {round_num}, "
+                               f"chunk数: {chunk_count}, 累计长度: {total_length}, "
+                               f"耗时: {elapsed:.2f}s")
+
                 yield chunk.content
+
+        # 记录完成信息
+        total_time = time.time() - start_time
+        logger.info(f"✅ LLM响应完成 - 模型: {model_role}, 轮次: {round_num}, "
+                   f"总chunk数: {chunk_count}, 总长度: {total_length}, "
+                   f"总耗时: {total_time:.2f}s, 平均速度: {total_length/total_time:.1f}字符/秒")
 
     def _build_discussion_messages(
         self,
@@ -304,6 +343,8 @@ class BrainstormAgent(BaseAgent):
         history: List[Dict]
     ) -> AsyncIterator[str]:
         """生成讨论总结"""
+        import time
+
         summary_prompt = self.config_dict.get("summary_prompt") or """请对以下讨论进行总结：
 
 1. 总结双方的主要观点
@@ -320,9 +361,31 @@ class BrainstormAgent(BaseAgent):
                                  for item in history]))
         ]
 
+        # 记录开始时间和基本信息
+        start_time = time.time()
+        total_length = 0
+        chunk_count = 0
+
+        logger.info(f"📝 开始生成讨论总结 - agent_id: {self.agent_id}, "
+                   f"讨论轮数: {len(history)//2}, 历史长度: {sum(len(item['content']) for item in history)}")
+
         async for chunk in llm.astream(messages):
             if chunk.content:
+                chunk_count += 1
+                total_length += len(chunk.content)
+
+                # 每5个chunk记录一次进度
+                if chunk_count % 5 == 0:
+                    elapsed = time.time() - start_time
+                    logger.info(f"📄 总结生成进度 - chunk数: {chunk_count}, "
+                               f"累计长度: {total_length}, 耗时: {elapsed:.2f}s")
+
                 yield chunk.content
+
+        # 记录完成信息
+        total_time = time.time() - start_time
+        logger.info(f"✅ 讨论总结完成 - 总chunk数: {chunk_count}, 总长度: {total_length}, "
+                   f"总耗时: {total_time:.2f}s")
 
     def get_config_schema(self) -> Dict[str, Any]:
         """返回配置模式定义"""
@@ -332,7 +395,7 @@ class BrainstormAgent(BaseAgent):
                 # 模型A配置
                 "model_a_name": {
                     "type": "string",
-                    "default": "gpt-4",
+                    "default": "gemini-2.5-flash-preview-05-20",
                     "description": "模型A的名称"
                 },
                 "model_a_temperature": {

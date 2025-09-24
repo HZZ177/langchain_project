@@ -65,14 +65,14 @@ class AgentManager:
                 # 根据Agent类型使用不同的临时配置
                 if agent_type == "brainstorm_agent":
                     temp_config = {
-                        "model_a_name": "gpt-4",
+                        "model_a_name": "gemini-2.5-flash-preview-05-20",
                         "model_a_api_key": "temp_key_for_schema_only",
                         "model_b_name": "claude-3-sonnet",
                         "model_b_api_key": "temp_key_for_schema_only"
                     }
                 else:
                     temp_config = {
-                        "model_name": "gpt-3.5-turbo",
+                        "model_name": "gemini-2.5-flash-preview-05-20",
                         "api_key": "temp_key_for_schema_only",
                         "base_url": "https://api.openai.com/v1"
                     }
@@ -147,15 +147,25 @@ class AgentManager:
         """获取连接池统计信息"""
         return llm_pool.get_pool_stats()
 
-    def clear_cache(self):
-        """清空Agent实例缓存（已废弃，保留兼容性）"""
-        logger.warning("clear_cache方法已废弃，Agent实例不再缓存")
-        pass
-
     def remove_agent_from_cache(self, agent_id: str, agent_type: str):
-        """从缓存中移除特定Agent实例（已废弃，保留兼容性）"""
-        logger.warning("remove_agent_from_cache方法已废弃，Agent实例不再缓存")
-        pass
+        """从缓存中移除特定Agent实例"""
+        # 调用新的连接池清理方法
+        self.clear_agent_connections(agent_id, agent_type)
+
+    def clear_agent_connections(self, agent_id: str, agent_type: str):
+        """清理Agent的连接池和缓存（用于配置更新）"""
+        logger.info(f"清理Agent连接 - agent_id: {agent_id}, agent_type: {agent_type}")
+        llm_pool.clear_agent_connections(agent_id, agent_type)
+
+    def prewarm_single_agent(self, agent_id: str, agent_type: str, config: Dict[str, Any]):
+        """预热单个Agent的连接池"""
+        logger.debug(f"预热单个Agent连接池 - agent_id: {agent_id}, agent_type: {agent_type}")
+        try:
+            llm_pool.prewarm_agent_pool(agent_id, agent_type, config)
+            logger.debug(f"单个Agent连接池预热成功 - agent_id: {agent_id}")
+        except Exception as e:
+            logger.error(f"单个Agent连接池预热失败 - agent_id: {agent_id}, 错误: {e}")
+            raise
 
     def _validate_required_config(self, agent_type: str, config: Dict[str, any]) -> bool:
         """验证必要的配置项"""

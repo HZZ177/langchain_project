@@ -76,10 +76,25 @@ class QAAgent(BaseAgent):
                        f"agent_id: {self.agent_id}, message_length: {len(message.content)}")
 
             # 流式调用LLM
+            import time
+            start_time = time.time()
             full_response = ""
+            chunk_count = 0
+
+            logger.info(f"🤖 开始调用LLM - 模型: {self.config.model_name}, "
+                       f"agent_id: {self.agent_id}, connection_id: {connection.connection_id}")
+
             async for chunk in llm.astream(messages):
                 if chunk.content:
+                    chunk_count += 1
                     full_response += chunk.content
+
+                    # 每20个chunk记录一次进度
+                    if chunk_count % 20 == 0:
+                        elapsed = time.time() - start_time
+                        logger.info(f"📝 LLM响应进度 - chunk数: {chunk_count}, "
+                                   f"累计长度: {len(full_response)}, 耗时: {elapsed:.2f}s")
+
                     yield AgentResponse(
                         content=chunk.content,
                         is_final=False,
@@ -90,6 +105,12 @@ class QAAgent(BaseAgent):
                         }
                     )
 
+            # 记录完成信息
+            total_time = time.time() - start_time
+            logger.info(f"✅ LLM响应完成 - 模型: {self.config.model_name}, "
+                       f"总chunk数: {chunk_count}, 总长度: {len(full_response)}, "
+                       f"总耗时: {total_time:.2f}s, 平均速度: {len(full_response)/total_time:.1f}字符/秒")
+
             # 发送最终响应标记
             yield AgentResponse(
                 content="",
@@ -99,7 +120,9 @@ class QAAgent(BaseAgent):
                     "total_tokens": len(full_response.split()),
                     "full_response": full_response,
                     "connection_id": connection.connection_id,
-                    "usage_count": connection.usage_count
+                    "usage_count": connection.usage_count,
+                    "total_time": total_time,
+                    "chunk_count": chunk_count
                 }
             )
 
@@ -147,7 +170,7 @@ class QAAgent(BaseAgent):
             "properties": {
                 "model_name": {
                     "type": "string",
-                    "default": "gpt-3.5-turbo",
+                    "default": "gemini-2.5-flash-preview-05-20",
                     "description": "使用的模型名称"
                 },
                 "temperature": {

@@ -44,7 +44,10 @@ class PrewarmLLMPool:
         
         # 活跃连接：connection_id -> LLMConnection
         self.active_connections: Dict[str, LLMConnection] = {}
-        
+
+        # Agent配置缓存：agent_id -> config (用于配置变更检测)
+        self.agent_configs: Dict[str, Dict[str, Any]] = {}
+
         # 统计信息
         self.stats = {
             "total_created": 0,
@@ -63,7 +66,85 @@ class PrewarmLLMPool:
         self._start_cleanup_task()
         
         logger.info(f"LLM连接池初始化完成 - 每Agent连接数: {pool_size_per_agent}, 最大闲置时间: {max_idle_time}秒")
-    
+
+    def _config_changed(self, agent_id: str, new_config: Dict[str, Any]) -> bool:
+        """检测Agent配置是否发生变化"""
+        if agent_id not in self.agent_configs:
+            return True  # 首次配置
+
+        old_config = self.agent_configs[agent_id]
+
+        # 比较关键配置项
+        key_fields = ["model_name", "api_key", "base_url", "temperature", "max_tokens"]
+        for field in key_fields:
+            if old_config.get(field) != new_config.get(field):
+                logger.info(f"检测到Agent {agent_id} 配置变更: {field} 从 '{old_config.get(field)}' 变为 '{new_config.get(field)}'")
+                return True
+
+        return False
+
+    def _clear_agent_pool(self, agent_id: str):
+        """清理指定Agent的连接池"""
+        if agent_id in self.pools:
+            pool = self.pools[agent_id]
+
+            # 清理池中的所有连接
+            cleared_count = 0
+            while not pool.empty():
+                try:
+                    connection = pool.get_nowait()
+                    self._recycle_connection(connection)
+                    cleared_count += 1
+                except Empty:
+                    break
+
+            # 删除连接池
+            del self.pools[agent_id]
+            logger.info(f"清理Agent {agent_id} 的连接池，清理了 {cleared_count} 个连接")
+
+        # 清理相关的活跃连接
+        connections_to_remove = []
+        for conn_id, connection in self.active_connections.items():
+            if connection.agent_id == agent_id:
+                connections_to_remove.append(conn_id)
+
+        for conn_id in connections_to_remove:
+            self._recycle_connection(self.active_connections[conn_id])
+            del self.active_connections[conn_id]
+
+        if connections_to_remove:
+            logger.info(f"清理Agent {agent_id} 的活跃连接，清理了 {len(connections_to_remove)} 个连接")
+
+    def clear_agent_connections(self, agent_id: str, agent_type: str = None):
+        """公共方法：清理指定Agent的所有连接（用于配置更新）"""
+        logger.info(f"开始清理Agent {agent_id} 的连接池和缓存")
+
+        with self.lock:
+            # 对于头脑风暴Agent，需要清理两个模型的连接
+            if agent_type == "brainstorm_agent":
+                model_a_id = f"{agent_id}_model_a"
+                model_b_id = f"{agent_id}_model_b"
+
+                self._clear_agent_pool(model_a_id)
+                self._clear_agent_pool(model_b_id)
+
+                # 清理配置缓存
+                if model_a_id in self.agent_configs:
+                    del self.agent_configs[model_a_id]
+                if model_b_id in self.agent_configs:
+                    del self.agent_configs[model_b_id]
+
+                logger.info(f"清理头脑风暴Agent {agent_id} 的双模型连接完成")
+            else:
+                # 单模型Agent
+                self._clear_agent_pool(agent_id)
+
+                # 清理配置缓存
+                if agent_id in self.agent_configs:
+                    del self.agent_configs[agent_id]
+
+                logger.info(f"清理单模型Agent {agent_id} 的连接完成")
+
     def _start_cleanup_task(self):
         """启动清理任务"""
         def cleanup_worker():
@@ -102,9 +183,15 @@ class PrewarmLLMPool:
             self._prewarm_single_model(f"{agent_id}_model_a", agent_type, model_a_config)
             # 为模型B预热连接池
             self._prewarm_single_model(f"{agent_id}_model_b", agent_type, model_b_config)
+
+            # 缓存双模型配置
+            self.agent_configs[f"{agent_id}_model_a"] = model_a_config.copy()
+            self.agent_configs[f"{agent_id}_model_b"] = model_b_config.copy()
         else:
             # 单模型Agent的原有逻辑
             self._prewarm_single_model(agent_id, agent_type, config)
+            # 缓存单模型配置
+            self.agent_configs[agent_id] = config.copy()
 
     def _prewarm_single_model(self, agent_id: str, agent_type: str, config: Dict[str, Any]):
         """为单个模型预热连接池"""
@@ -122,7 +209,10 @@ class PrewarmLLMPool:
             for i in range(self.pool_size_per_agent):
                 try:
                     connection_id = f"{agent_id}_{agent_type}_{i}_{int(time.time())}"
+                    logger.debug(f"正在创建LLM实例 - connection_id: {connection_id}, 配置: {config}")
+
                     llm = self._create_llm(config)
+                    logger.debug(f"LLM实例创建成功 - connection_id: {connection_id}")
 
                     connection = LLMConnection(
                         llm=llm,
@@ -137,10 +227,11 @@ class PrewarmLLMPool:
                     self.stats["total_created"] += 1
                     self.stats["current_idle"] += 1
 
-                    logger.info(f"预创建LLM连接 - connection_id: {connection_id}")
+                    logger.debug(f"预创建LLM连接成功 - connection_id: {connection_id}")
 
                 except Exception as e:
-                    logger.error(f"预创建LLM连接失败 - agent_id: {agent_id}, 错误: {e}")
+                    logger.error(f"预创建LLM连接失败 - agent_id: {agent_id}, connection_id: {connection_id}, 错误: {e}")
+                    logger.exception("预创建LLM连接异常详情")
 
             self.pools[agent_id] = pool
             logger.info(f"Agent连接池预热完成 - agent_id: {agent_id}, 连接数: {pool.qsize()}")
@@ -148,11 +239,28 @@ class PrewarmLLMPool:
     def get_llm_connection(self, agent_id: str, agent_type: str, config: Dict[str, Any]) -> Optional[LLMConnection]:
         """获取LLM连接"""
         with self.lock:
+            # 检查配置是否发生变化
+            if self._config_changed(agent_id, config):
+                logger.info(f"Agent {agent_id} 配置发生变化，清理旧连接池")
+                self._clear_agent_pool(agent_id)
+                # 更新配置缓存
+                self.agent_configs[agent_id] = config.copy()
+
             # 检查是否有预热的连接池
             if agent_id not in self.pools:
                 logger.warning(f"Agent {agent_id} 没有预热连接池，动态创建")
-                self.prewarm_agent_pool(agent_id, agent_type, config)
-            
+
+                # 对于头脑风暴Agent的子模型，需要特殊处理
+                if agent_type == "brainstorm_agent" and ("_model_a" in agent_id or "_model_b" in agent_id):
+                    # 这是头脑风暴Agent的子模型，直接创建单个模型的连接池
+                    logger.info(f"为头脑风暴Agent子模型 {agent_id} 动态创建连接池")
+                    self._prewarm_single_model(agent_id, agent_type, config)
+                    # 缓存子模型配置
+                    self.agent_configs[agent_id] = config.copy()
+                else:
+                    # 普通Agent或完整的头脑风暴Agent
+                    self.prewarm_agent_pool(agent_id, agent_type, config)
+
             pool = self.pools[agent_id]
             
             try:
@@ -171,8 +279,9 @@ class PrewarmLLMPool:
                 self.stats["current_idle"] -= 1
                 
                 logger.info(f"复用LLM连接 - connection_id: {connection.connection_id}, "
-                          f"使用次数: {connection.usage_count}, agent_id: {agent_id}")
-                
+                          f"使用次数: {connection.usage_count}, agent_id: {agent_id}, "
+                          f"池状态: 活跃{self.stats['current_active']}/空闲{self.stats['current_idle']}")
+
                 return connection
                 
             except Empty:
@@ -207,8 +316,9 @@ class PrewarmLLMPool:
                         self.stats["current_active"] -= 1
                         self.stats["current_idle"] += 1
                         
-                        logger.info(f"释放LLM连接回池 - connection_id: {connection_id}, agent_id: {agent_id}")
-                        
+                        logger.info(f"释放LLM连接回池 - connection_id: {connection_id}, agent_id: {agent_id}, "
+                                   f"池状态: 活跃{self.stats['current_active']}/空闲{self.stats['current_idle']}")
+
                     except Exception as e:
                         logger.error(f"释放连接回池失败 - connection_id: {connection_id}, 错误: {e}")
                         self._recycle_connection(connection)
@@ -282,7 +392,7 @@ class PrewarmLLMPool:
             self.stats["total_recycled"] += 1
             self.stats["current_active"] = max(0, self.stats["current_active"] - 1)
             
-            logger.info(f"回收LLM连接 - connection_id: {connection.connection_id}")
+            logger.debug(f"回收LLM连接 - connection_id: {connection.connection_id}")
             
         except Exception as e:
             logger.error(f"回收连接失败 - connection_id: {connection.connection_id}, 错误: {e}")

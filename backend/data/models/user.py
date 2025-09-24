@@ -1,7 +1,7 @@
 """
 用户数据模型
 """
-from sqlalchemy import Column, Integer, BigInteger, String, Boolean, DateTime, func
+from sqlalchemy import Column, Integer, BigInteger, String, Boolean, DateTime, func, text
 from backend.data.database import Base
 
 
@@ -15,8 +15,8 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime, server_default=text("datetime('now', 'localtime')"))
+    updated_at = Column(DateTime, server_default=text("datetime('now', 'localtime')"), onupdate=text("datetime('now', 'localtime')"))
     
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', email='{self.email}')>"
